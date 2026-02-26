@@ -9,7 +9,7 @@
     "ApplicableVersion": "any",
     "DalamudApiLevel": 14,
     "Tags": ["events", "venue", "community", "partake", "ffxivenue"],
-    "IconUrl": "https://raw.githubusercontent.com/NalaPraline/VenueScope/main/Data/goat.png",
+    "IconUrl": "https://raw.githubusercontent.com/NalaPraline/VenueScope/main/Data/icon.png",
     "RepoUrl": "https://github.com/NalaPraline/VenueScope",
     "DownloadLinkInstall": "https://github.com/NalaPraline/VenueScope/releases/latest/download/latest.zip",
     "DownloadLinkTesting": "https://github.com/NalaPraline/VenueScope/releases/latest/download/latest.zip",
