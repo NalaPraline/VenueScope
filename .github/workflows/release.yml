@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Download Dalamud
+        run: |
+          Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile dalamud.zip
+          Expand-Archive -Force dalamud.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
+
+      - name: Build
+        run: dotnet build --configuration Release
+
+      - name: Package plugin
+        run: |
+          $dll = Get-ChildItem -Recurse -Filter "VenueScope.dll" | Where-Object { $_.FullName -like "*Release*" } | Select-Object -First 1
+          if (-not $dll) { Write-Error "DLL not found!"; exit 1 }
+          $dir = $dll.DirectoryName
+          $files = Get-ChildItem $dir | Where-Object { $_.Extension -ne ".zip" }
+          Compress-Archive -Path ($files.FullName) -DestinationPath "latest.zip" -Force
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: latest.zip
+          generate_release_notes: true
