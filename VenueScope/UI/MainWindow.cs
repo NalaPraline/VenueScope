@@ -548,8 +548,22 @@ public sealed class MainWindow : Window, IDisposable
         string dcPart  = _selectedDcKeys.Count == 0
             ? "_global_all"
             : string.Join(",", _selectedDcKeys.OrderBy(x => x));
-        string srcPart = _sourceFilter?.ToString() ?? "all";
-        return $"{dcPart}|{srcPart}";
+        string srcPart = (_sourceFilter != null && !_favoritesOnly)
+            ? _sourceFilter.ToString()!
+            : "all";
+        string favPart = _favoritesOnly ? $"|fav{ComputeFavHash()}" : string.Empty;
+        return $"{dcPart}|{srcPart}{favPart}";
+    }
+
+    private int ComputeFavHash()
+    {
+        unchecked
+        {
+            int h = 17;
+            foreach (var id in _config.FavoriteEventIds.OrderBy(x => x))
+                h = h * 31 + id.GetHashCode();
+            return h;
+        }
     }
 
     private void EnsureTagsBuilt(string cacheKey)
@@ -575,7 +589,9 @@ public sealed class MainWindow : Window, IDisposable
             events = _selectedDcKeys.SelectMany(dc =>
                 _cache.EventsByDc.GetValueOrDefault(dc) ?? Enumerable.Empty<VenueEvent>());
 
-        if (_sourceFilter != null)
+        // Source filter is ignored when favorites-only is active
+        // (favorites can come from any source)
+        if (_sourceFilter != null && !_favoritesOnly)
             events = events.Where(e => e.Source == _sourceFilter);
 
         if (_favoritesOnly)
