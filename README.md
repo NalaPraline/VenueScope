@@ -1,12 +1,12 @@
 # VenueScope
 
-Browse FFXIV community events from [Partake.gg](https://www.partake.gg/) and [FFXIVenues](https://ffxivvenues.com/) directly in-game.
+Browse FFXIV community events from [Partake.gg](https://www.partake.gg/) and [FFXIV Venues](https://ffxivvenues.com/) directly in-game.
 
 ## Features
 
 - Browse upcoming and live events filtered by data center
 - Filter by time: All / Live Now / Today
-- Filter by source: Partake · FFXIVenue
+- Filter by source: Partake · FFXIV Venue
 - Filter by tags and search by title, location, or tag
 - Click event titles to open them in your browser
 - Copy Lifestream teleport codes with one click
