@@ -46,17 +46,13 @@ public sealed class MainWindow : Window, IDisposable
 
     private const float SidebarW = 165f; // unscaled px
 
-    private readonly Action _openMap;
-
-    public MainWindow(EventCacheService cache, PartakeService partake, Configuration config,
-                      Action openConfig, Action openMap)
+    public MainWindow(EventCacheService cache, PartakeService partake, Configuration config, Action openConfig)
         : base("VenueScope##main", ImGuiWindowFlags.None)
     {
         _cache      = cache;
         _partake    = partake;
         _config     = config;
         _openConfig = openConfig;
-        _openMap    = openMap;
 
         SizeCondition   = ImGuiCond.FirstUseEver;
         Size            = new Vector2(1050, 620);
@@ -152,13 +148,10 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         // Right side
-        float btnReloadW   = ImGui.CalcTextSize("  Reload  ").X   + ImGui.GetStyle().FramePadding.X * 2;
-        float btnMapW      = ImGui.CalcTextSize("  Map  ").X       + ImGui.GetStyle().FramePadding.X * 2;
-        float btnSettingsW = ImGui.CalcTextSize("  Settings  ").X  + ImGui.GetStyle().FramePadding.X * 2;
+        float btnReloadW   = ImGui.CalcTextSize("  Reload  ").X  + ImGui.GetStyle().FramePadding.X * 2;
+        float btnSettingsW = ImGui.CalcTextSize("  Settings  ").X + ImGui.GetStyle().FramePadding.X * 2;
         float statusW      = 120f * gs;
-        float spc          = ImGui.GetStyle().ItemSpacing.X;
-        ImGui.SameLine(ImGui.GetContentRegionMax().X
-            - btnReloadW - btnMapW - btnSettingsW - statusW - spc * 3f - 8f * gs);
+        ImGui.SameLine(ImGui.GetContentRegionMax().X - btnReloadW - btnSettingsW - statusW - 32f * gs);
 
         if (_cache.IsRefreshing)
             ImGui.TextColored(new Vector4(1f, 0.82f, 0.20f, 1f), "Loading...");
@@ -179,16 +172,6 @@ public sealed class MainWindow : Window, IDisposable
                 _filterCache.Clear();
                 Task.Run(_cache.RefreshNowAsync);
             }
-        }
-
-        ImGui.SameLine(0, 6);
-
-        using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.14f, 0.28f, 0.22f, 0.85f)))
-        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.18f, 0.38f, 0.30f, 1.00f)))
-        using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.22f, 0.50f, 0.38f, 1.00f)))
-        {
-            if (ImGui.SmallButton("  Map  ##mapbtn"))
-                _openMap();
         }
 
         ImGui.SameLine(0, 6);

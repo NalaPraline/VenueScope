@@ -22,14 +22,12 @@ public sealed class Plugin : IDalamudPlugin
 
     private const string CmdMain  = "/venuescope";
     private const string CmdAlias = "/vs";
-    private const string CmdMap   = "/vsmap";
 
     public Configuration Configuration { get; init; }
 
     public readonly WindowSystem WindowSystem = new("VenueScope");
     private MainWindow   MainWindow   { get; init; }
     private ConfigWindow ConfigWindow { get; init; }
-    private MapWindow    MapWindow    { get; init; }
 
     private readonly PartakeService      _partakeService;
     private readonly FFXIVenueService    _ffxivenueService;
@@ -49,14 +47,11 @@ public sealed class Plugin : IDalamudPlugin
         _teamIconCache       = new TeamIconCache(TextureProvider, Log);
         EventRenderer.IconCache = _teamIconCache;
 
-        // UI — MapWindow must be created before MainWindow (Toggle ref passed in ctor)
+        // UI
         ConfigWindow = new ConfigWindow(Configuration, _partakeService, _cacheService);
         WindowSystem.AddWindow(ConfigWindow);
 
-        MapWindow = new MapWindow(_cacheService);
-        WindowSystem.AddWindow(MapWindow);
-
-        MainWindow = new MainWindow(_cacheService, _partakeService, Configuration, ConfigWindow.Toggle, MapWindow.Toggle);
+        MainWindow = new MainWindow(_cacheService, _partakeService, Configuration, ConfigWindow.Toggle);
         WindowSystem.AddWindow(MainWindow);
 
         // Commands
@@ -67,10 +62,6 @@ public sealed class Plugin : IDalamudPlugin
         CommandManager.AddHandler(CmdAlias, new CommandInfo(OnCommand)
         {
             HelpMessage = "Alias for /venuescope"
-        });
-        CommandManager.AddHandler(CmdMap, new CommandInfo((_, _) => MapWindow.Toggle())
-        {
-            HelpMessage = "Open VenueScope housing map"
         });
 
         PluginInterface.UiBuilder.Draw         += WindowSystem.Draw;
@@ -92,12 +83,9 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.RemoveAllWindows();
         ConfigWindow.Dispose();
         MainWindow.Dispose();
-        MapWindow.Dispose();
-        HousingMapService.Clear();
 
         CommandManager.RemoveHandler(CmdMain);
         CommandManager.RemoveHandler(CmdAlias);
-        CommandManager.RemoveHandler(CmdMap);
 
         _notificationService.Dispose();
         _cacheService.Dispose();
@@ -111,5 +99,4 @@ public sealed class Plugin : IDalamudPlugin
     private void OnCommand(string command, string args) => MainWindow.Toggle();
     public void ToggleMainUi()   => MainWindow.Toggle();
     public void ToggleConfigUi() => ConfigWindow.Toggle();
-    public void ToggleMapUi()    => MapWindow.Toggle();
 }
