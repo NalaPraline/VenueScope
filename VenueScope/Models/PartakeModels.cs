@@ -25,8 +25,17 @@ public class PartakeEvent
     [JsonProperty("attendeeCount")] public int AttendeeCount  { get; set; }
     [JsonProperty("locationData")] public PartakeLocationData? LocationData { get; set; }
 
+    [JsonProperty("team")] public PartakeTeam? Team { get; set; }
+
     private HashSet<string>? _tagsSet;
     [JsonIgnore] public HashSet<string> TagsSet => _tagsSet ??= new HashSet<string>(Tags);
+}
+
+public class PartakeTeam
+{
+    [JsonProperty("id")]      public int    Id      { get; set; }
+    [JsonProperty("name")]    public string Name    { get; set; } = string.Empty;
+    [JsonProperty("iconUrl")] public string? IconUrl { get; set; }
 }
 
 public class PartakeLocationData

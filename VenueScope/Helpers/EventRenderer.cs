@@ -1,4 +1,5 @@
 using System;
+using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
@@ -28,6 +29,12 @@ public static class EventRenderer
     private static readonly Vector4 ColTimeFut   = new(0.52f, 0.74f, 1.00f, 1f);
     private static readonly Vector4 ColNew       = new(1.00f, 0.80f, 0.16f, 1f);
     private static readonly Vector4 ColCardBg    = new(0.13f, 0.13f, 0.20f, 1.00f);
+
+    /// <summary>Set by Plugin on startup. Used to fetch team icon textures.</summary>
+    public static Services.TeamIconCache? IconCache;
+
+    private static IDalamudTextureWrap? GetIcon(VenueEvent ev) =>
+        IconCache?.GetOrQueue(ev.TeamIconUrl);
 
     // ── Tag color palette ─────────────────────────────────────────────────────
     private static readonly Vector4[] TagPalette =
@@ -120,24 +127,35 @@ public static class EventRenderer
             new Vector2(cardTL.X + 3f * gs, cardBR.Y - 4f * gs),
             ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.90f }), 2f);
 
-        // Thumbnail placeholder
+        // Thumbnail
         float thumbTop  = cardTL.Y + padY;
         float thumbLeft = cardTL.X + padX;
         var   tTL       = new Vector2(thumbLeft, thumbTop);
         var   tBR       = tTL + new Vector2(thumbW, thumbH);
 
-        dl.AddRectFilled(tTL, tBR,
-            ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.13f }), 4f * gs);
-        dl.AddRect(tTL, tBR,
-            ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.30f }), 4f * gs, 0, gs);
-
-        // Source initial centered in thumbnail
-        string initial  = ev.Source == EventSource.Partake ? "P" : "V";
-        var    initSz   = ImGui.CalcTextSize(initial);
-        dl.AddText(
-            tTL + new Vector2((thumbW - initSz.X) * 0.5f, (thumbH - initSz.Y) * 0.5f),
-            ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.40f }),
-            initial);
+        var icon = GetIcon(ev);
+        if (icon != null)
+        {
+            // Actual team icon — draw rounded
+            dl.AddImageRounded(icon.Handle, tTL, tBR,
+                Vector2.Zero, Vector2.One, 0xFFFFFFFF, 4f * gs);
+            dl.AddRect(tTL, tBR,
+                ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.25f }), 4f * gs, 0, gs);
+        }
+        else
+        {
+            // Placeholder while loading or no icon
+            dl.AddRectFilled(tTL, tBR,
+                ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.13f }), 4f * gs);
+            dl.AddRect(tTL, tBR,
+                ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.30f }), 4f * gs, 0, gs);
+            string initial = ev.Source == EventSource.Partake ? "P" : "V";
+            var    initSz  = ImGui.CalcTextSize(initial);
+            dl.AddText(
+                tTL + new Vector2((thumbW - initSz.X) * 0.5f, (thumbH - initSz.Y) * 0.5f),
+                ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.40f }),
+                initial);
+        }
 
         dl.ChannelsMerge();
     }

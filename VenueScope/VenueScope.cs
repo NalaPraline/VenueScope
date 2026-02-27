@@ -3,6 +3,7 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
+using VenueScope.Helpers;
 using VenueScope.Services;
 using VenueScope.UI;
 
@@ -17,6 +18,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IPluginLog              Log                  { get; private set; } = null!;
     [PluginService] internal static INotificationManager    NotificationManager  { get; private set; } = null!;
     [PluginService] internal static IDataManager            DataManager          { get; private set; } = null!;
+    [PluginService] internal static ITextureProvider        TextureProvider      { get; private set; } = null!;
 
     private const string CmdMain  = "/venuescope";
     private const string CmdAlias = "/vs";
@@ -31,6 +33,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly FFXIVenueService    _ffxivenueService;
     private readonly EventCacheService   _cacheService;
     private readonly NotificationService _notificationService;
+    private readonly TeamIconCache       _teamIconCache;
 
     public Plugin()
     {
@@ -41,6 +44,8 @@ public sealed class Plugin : IDalamudPlugin
         _ffxivenueService    = new FFXIVenueService(Log);
         _cacheService        = new EventCacheService(_partakeService, _ffxivenueService, Configuration, Log);
         _notificationService = new NotificationService(_cacheService, Configuration, NotificationManager, Log);
+        _teamIconCache       = new TeamIconCache(TextureProvider, Log);
+        EventRenderer.IconCache = _teamIconCache;
 
         // UI
         ConfigWindow = new ConfigWindow(Configuration, _partakeService, _cacheService);
@@ -86,6 +91,7 @@ public sealed class Plugin : IDalamudPlugin
         _cacheService.Dispose();
         _partakeService.Dispose();
         _ffxivenueService.Dispose();
+        _teamIconCache.Dispose();
 
         Log.Information("[VenueScope] Plugin unloaded.");
     }

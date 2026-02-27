@@ -136,6 +136,7 @@ public partial class PartakeService : IDisposable
                     id, title, locationId, ageRating, attendeeCount,
                     startsAt, endsAt, location, tags,
                     description(type: PLAIN_TEXT)
+                    team {{ id name iconUrl }}
                     locationData {{
                         server {{ id name dataCenterId }}
                         dataCenter {{ id name }}
@@ -166,6 +167,7 @@ public partial class PartakeService : IDisposable
                     id, title, locationId, ageRating, attendeeCount,
                     startsAt, endsAt, location, tags,
                     description(type: PLAIN_TEXT)
+                    team {{ id name iconUrl }}
                     locationData {{
                         server {{ id name dataCenterId }}
                         dataCenter {{ id name }}
@@ -217,6 +219,8 @@ public partial class PartakeService : IDisposable
                 EventUrl         = $"https://www.partake.gg/events/{ev.Id}",
                 Source           = EventSource.Partake,
                 AttendeeCount    = ev.AttendeeCount,
+                TeamName         = ev.Team?.Name ?? string.Empty,
+                TeamIconUrl      = ev.Team?.IconUrl ?? string.Empty,
             });
         }
         return result;

@@ -24,7 +24,9 @@ public class VenueEvent
     // Code Lifestream pour téléportation rapide (ex: "Goblet W8 P12")
     public string LifestreamCode { get; set; } = string.Empty;
 
-    public string BannerUrl { get; set; } = string.Empty;
+    public string BannerUrl    { get; set; } = string.Empty;
+    public string TeamIconUrl  { get; set; } = string.Empty;
+    public string TeamName     { get; set; } = string.Empty;
     public List<string> Tags { get; set; } = new();
     public string EventUrl { get; set; } = string.Empty;
     public EventSource Source { get; set; }
