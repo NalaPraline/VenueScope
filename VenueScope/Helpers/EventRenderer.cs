@@ -317,9 +317,9 @@ public static class EventRenderer
             using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.30f, 0.64f, 0.38f, 1.00f));
             using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.62f, 1.00f, 0.70f, 1.00f));
             if (ImGui.SmallButton($" Teleport ##{ev.Id}"))
-                ImGui.SetClipboardText($"/li {ev.LifestreamCode}");
+                Plugin.CommandManager.ProcessCommand($"/li {ev.LifestreamCode}");
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip($"Copy teleport code\n/li {ev.LifestreamCode}");
+                ImGui.SetTooltip($"/li {ev.LifestreamCode}");
         }
     }
 
