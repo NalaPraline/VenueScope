@@ -69,7 +69,7 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.TextColored(ColSubtitle, "— upcoming community events");
 
         var showF = _config.ShowFFXIVenueEvents;
-        if (ImGui.Checkbox("FFXIVenue", ref showF) && showF != _config.ShowFFXIVenueEvents)
+        if (ImGui.Checkbox("FFXIV Venues", ref showF) && showF != _config.ShowFFXIVenueEvents)
         {
             _config.ShowFFXIVenueEvents = showF;
             _config.Save();
@@ -104,7 +104,7 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.TextColored(ColSubtitle,
             _cache.IsRefreshing
                 ? "  Refreshing..."
-                : $"  {pCount} Partake  ·  {fCount} FFXIVenue events cached");
+                : $"  {pCount} Partake  ·  {fCount} FFXIV Venues events cached");
 
         ImGui.Spacing();
 
@@ -215,7 +215,7 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.SameLine(0, 12);
         if (DrawRadio("Partake##defsrc",   _config.DefaultSourceFilter,  0)) { _config.DefaultSourceFilter =  0; _config.Save(); }
         ImGui.SameLine(0, 12);
-        if (DrawRadio("FFXIVenue##defsrc", _config.DefaultSourceFilter,  1)) { _config.DefaultSourceFilter =  1; _config.Save(); }
+        if (DrawRadio("FFXIV Venues##defsrc", _config.DefaultSourceFilter,  1)) { _config.DefaultSourceFilter =  1; _config.Save(); }
 
         ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }
@@ -241,7 +241,7 @@ public sealed class ConfigWindow : Window, IDisposable
 
         DrawLinkButton("Partake.gg",  "https://www.partake.gg/",  new Vector4(0.33f, 0.58f, 0.96f, 1f));
         ImGui.SameLine(0, 8);
-        DrawLinkButton("FFXIVenues",  "https://ffxivvenues.com/", new Vector4(0.62f, 0.32f, 0.92f, 1f));
+        DrawLinkButton("FFXIV Venues", "https://ffxivvenues.com/", new Vector4(0.62f, 0.32f, 0.92f, 1f));
 
         ImGui.Spacing();
 

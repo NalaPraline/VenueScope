@@ -214,7 +214,7 @@ public static class EventRenderer
     {
         // Source badge
         using (ImRaii.PushColor(ImGuiCol.Text, srcColor with { W = 0.50f }))
-            ImGui.TextUnformatted(ev.Source == EventSource.Partake ? "Partake" : "FFXIVenue");
+            ImGui.TextUnformatted(ev.Source == EventSource.Partake ? "Partake" : "FFXIV Venues");
 
         // Server / DC
         if (!string.IsNullOrEmpty(cached.ServerDc))

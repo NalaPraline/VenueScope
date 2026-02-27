@@ -284,7 +284,7 @@ public sealed class MainWindow : Window, IDisposable
         DrawSidebarLabel("SOURCE");
         DrawSidebarSourceItem("All Sources",    null,                  ColAccent);
         DrawSidebarSourceItem("Partake.gg",     EventSource.Partake,   ColPartake);
-        DrawSidebarSourceItem("FFXIVenues.com", EventSource.FFXIVenue, ColFFXIVenue);
+        DrawSidebarSourceItem("FFXIV Venues",   EventSource.FFXIVenue, ColFFXIVenue);
 
         ImGui.Spacing();
         DrawSidebarRule();
@@ -510,7 +510,7 @@ public sealed class MainWindow : Window, IDisposable
         string srcLabel = _sourceFilter switch
         {
             EventSource.Partake   => "  ·  Partake",
-            EventSource.FFXIVenue => "  ·  FFXIVenues",
+            EventSource.FFXIVenue => "  ·  FFXIV Venues",
             _                     => string.Empty,
         };
         ImGui.TextColored(ColSubtitle,
