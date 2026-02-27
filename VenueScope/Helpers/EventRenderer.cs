@@ -34,7 +34,8 @@ public static class EventRenderer
     public static Services.TeamIconCache? IconCache;
 
     private static IDalamudTextureWrap? GetIcon(VenueEvent ev) =>
-        IconCache?.GetOrQueue(ev.TeamIconUrl);
+        IconCache?.GetOrQueue(
+            !string.IsNullOrEmpty(ev.TeamIconUrl) ? ev.TeamIconUrl : ev.BannerUrl);
 
     // ── Tag color palette ─────────────────────────────────────────────────────
     private static readonly Vector4[] TagPalette =
@@ -136,9 +137,23 @@ public static class EventRenderer
         var icon = GetIcon(ev);
         if (icon != null)
         {
-            // Actual team icon — draw rounded
-            dl.AddImageRounded(icon.Handle, tTL, tBR,
-                Vector2.Zero, Vector2.One, 0xFFFFFFFF, 4f * gs);
+            // Compute UV: center-crop if the image is wider than the thumbnail box
+            var uv0 = Vector2.Zero;
+            var uv1 = Vector2.One;
+            if (icon.Width > 0 && icon.Height > 0)
+            {
+                float imgAspect = (float)icon.Width / icon.Height;
+                float boxAspect = thumbW / thumbH;
+                if (imgAspect > boxAspect)
+                {
+                    float cropFraction = boxAspect / imgAspect;
+                    float offset = (1f - cropFraction) * 0.5f;
+                    uv0 = new Vector2(offset, 0f);
+                    uv1 = new Vector2(1f - offset, 1f);
+                }
+            }
+
+            dl.AddImageRounded(icon.Handle, tTL, tBR, uv0, uv1, 0xFFFFFFFF, 4f * gs);
             dl.AddRect(tTL, tBR,
                 ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.25f }), 4f * gs, 0, gs);
         }
