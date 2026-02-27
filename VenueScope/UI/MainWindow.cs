@@ -267,10 +267,10 @@ public sealed class MainWindow : Window, IDisposable
 
         // ── BROWSE ────────────────────────────────────────────────────────────
         DrawSidebarLabel("BROWSE");
-        DrawSidebarTimeItem("● Live Now",  TimeFilter.LiveNow,  ColTimeLive);
-        DrawSidebarTimeItem("  Today",     TimeFilter.Today,    ColTimeToday);
-        DrawSidebarTimeItem("  Upcoming",  TimeFilter.Upcoming, ColTimeUpcom);
-        DrawSidebarTimeItem("  All",       TimeFilter.All,      ColSubtitle);
+        DrawSidebarTimeItem("● Live Now", TimeFilter.LiveNow,  ColTimeLive);
+        DrawSidebarTimeItem("Today",      TimeFilter.Today,    ColTimeToday);
+        DrawSidebarTimeItem("Upcoming",   TimeFilter.Upcoming, ColTimeUpcom);
+        DrawSidebarTimeItem("All",        TimeFilter.All,      ColSubtitle);
 
         ImGui.Spacing();
         DrawSidebarRule();
@@ -278,9 +278,9 @@ public sealed class MainWindow : Window, IDisposable
 
         // ── SOURCE ────────────────────────────────────────────────────────────
         DrawSidebarLabel("SOURCE");
-        DrawSidebarSourceItem("  All Sources",    null,                  ColAccent);
-        DrawSidebarSourceItem("  Partake.gg",     EventSource.Partake,   ColPartake);
-        DrawSidebarSourceItem("  FFXIVenues.com", EventSource.FFXIVenue, ColFFXIVenue);
+        DrawSidebarSourceItem("All Sources",    null,                  ColAccent);
+        DrawSidebarSourceItem("Partake.gg",     EventSource.Partake,   ColPartake);
+        DrawSidebarSourceItem("FFXIVenues.com", EventSource.FFXIVenue, ColFFXIVenue);
 
         ImGui.Spacing();
         DrawSidebarRule();
@@ -313,57 +313,51 @@ public sealed class MainWindow : Window, IDisposable
     {
         bool  active = _timeFilter == filter;
         float gs     = ImGuiHelpers.GlobalScale;
-        float w      = ImGui.GetContentRegionAvail().X;
-        float h      = ImGui.GetTextLineHeightWithSpacing();
+        float w      = ImGui.GetContentRegionAvail().X - 10f * gs;
 
-        if (active)
-        {
-            var p0 = ImGui.GetCursorScreenPos();
-            var dl = ImGui.GetWindowDrawList();
-            dl.AddRectFilled(p0, p0 + new Vector2(w, h),
-                ImGui.ColorConvertFloat4ToU32(color with { W = 0.12f }));
-            dl.AddRectFilled(p0, p0 + new Vector2(3f * gs, h),
-                ImGui.ColorConvertFloat4ToU32(color with { W = 0.85f }));
-        }
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5f * gs);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding,   4f * gs);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
 
-        using (ImRaii.PushColor(ImGuiCol.Text,          active ? color : ColSubtitle with { W = 0.65f }))
-        using (ImRaii.PushColor(ImGuiCol.Header,        Vector4.Zero))
-        using (ImRaii.PushColor(ImGuiCol.HeaderHovered, color with { W = 0.08f }))
+        using (ImRaii.PushColor(ImGuiCol.Button,        active ? color with { W = 0.22f } : new Vector4(0.11f, 0.11f, 0.17f, 0.70f)))
+        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, color with { W = active ? 0.30f : 0.13f }))
+        using (ImRaii.PushColor(ImGuiCol.ButtonActive,  color with { W = 0.40f }))
+        using (ImRaii.PushColor(ImGuiCol.Text,          active ? color : ColSubtitle with { W = 0.70f }))
+        using (ImRaii.PushColor(ImGuiCol.Border,        active ? color with { W = 0.65f } : color with { W = 0.20f }))
         {
-            if (ImGui.Selectable($"{label}##tf{(int)filter}", active,
-                    ImGuiSelectableFlags.None, new Vector2(w, 0f)))
+            if (ImGui.Button($"{label}##tf{(int)filter}", new Vector2(w, 26f * gs)))
                 _timeFilter = filter;
         }
+
+        ImGui.PopStyleVar(2);
+        ImGui.Spacing();
     }
 
     private void DrawSidebarSourceItem(string label, EventSource? source, Vector4 color)
     {
         bool  active = _sourceFilter == source;
         float gs     = ImGuiHelpers.GlobalScale;
-        float w      = ImGui.GetContentRegionAvail().X;
-        float h      = ImGui.GetTextLineHeightWithSpacing();
+        float w      = ImGui.GetContentRegionAvail().X - 10f * gs;
 
-        if (active)
-        {
-            var p0 = ImGui.GetCursorScreenPos();
-            var dl = ImGui.GetWindowDrawList();
-            dl.AddRectFilled(p0, p0 + new Vector2(w, h),
-                ImGui.ColorConvertFloat4ToU32(color with { W = 0.12f }));
-            dl.AddRectFilled(p0, p0 + new Vector2(3f * gs, h),
-                ImGui.ColorConvertFloat4ToU32(color with { W = 0.85f }));
-        }
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5f * gs);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding,   4f * gs);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
 
-        using (ImRaii.PushColor(ImGuiCol.Text,          active ? color : ColSubtitle with { W = 0.65f }))
-        using (ImRaii.PushColor(ImGuiCol.Header,        Vector4.Zero))
-        using (ImRaii.PushColor(ImGuiCol.HeaderHovered, color with { W = 0.08f }))
+        using (ImRaii.PushColor(ImGuiCol.Button,        active ? color with { W = 0.22f } : new Vector4(0.11f, 0.11f, 0.17f, 0.70f)))
+        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, color with { W = active ? 0.30f : 0.13f }))
+        using (ImRaii.PushColor(ImGuiCol.ButtonActive,  color with { W = 0.40f }))
+        using (ImRaii.PushColor(ImGuiCol.Text,          active ? color : ColSubtitle with { W = 0.70f }))
+        using (ImRaii.PushColor(ImGuiCol.Border,        active ? color with { W = 0.65f } : color with { W = 0.20f }))
         {
-            if (ImGui.Selectable($"{label}##src{source?.ToString() ?? "all"}", active,
-                    ImGuiSelectableFlags.None, new Vector2(w, 0f)))
+            if (ImGui.Button($"{label}##src{source?.ToString() ?? "all"}", new Vector2(w, 26f * gs)))
             {
                 _sourceFilter = source;
                 _filterCache.Clear();
             }
         }
+
+        ImGui.PopStyleVar(2);
+        ImGui.Spacing();
     }
 
     private void DrawSidebarTags(float sidebarW)
