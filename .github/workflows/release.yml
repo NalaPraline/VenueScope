@@ -39,14 +39,17 @@ jobs:
       - name: Update pluginmaster.json
         run: |
           $version = "${{ github.ref_name }}" -replace '^v', ''
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git pull origin main
           $content = Get-Content docs/pluginmaster.json -Raw
           $content = $content -replace '"AssemblyVersion":\s*"[^"]*"', "`"AssemblyVersion`": `"$version`""
           Set-Content docs/pluginmaster.json -Value $content -Encoding UTF8 -NoNewline
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/pluginmaster.json
           git diff --cached --quiet || git commit -m "chore: bump pluginmaster.json to ${{ github.ref_name }}"
-          git push origin HEAD:main
+          git push origin main
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
