@@ -29,6 +29,7 @@ public sealed class MainWindow : Window, IDisposable
 
     private int      _shuffleSeed     = Environment.TickCount;
     private DateTime _lastSeenRefresh = DateTime.MinValue;
+    private bool     _favoritesOnly   = false;
 
     private enum TimeFilter { All = 0, LiveNow = 1, Today = 2, Upcoming = 3 }
 
@@ -289,6 +290,14 @@ public sealed class MainWindow : Window, IDisposable
         DrawSidebarRule();
         ImGui.Spacing();
 
+        // ── FAVORITES ─────────────────────────────────────────────────────────
+        DrawSidebarLabel("FAVORITES");
+        DrawSidebarToggleItem("\u2605 Favorites", ref _favoritesOnly, new Vector4(1.00f, 0.82f, 0.14f, 1f));
+
+        ImGui.Spacing();
+        DrawSidebarRule();
+        ImGui.Spacing();
+
         // ── TAGS ──────────────────────────────────────────────────────────────
         DrawSidebarLabel("TAGS");
         ImGui.Spacing();
@@ -330,6 +339,33 @@ public sealed class MainWindow : Window, IDisposable
         {
             if (ImGui.Button($"{label}##tf{(int)filter}", new Vector2(w, 26f * gs)))
                 _timeFilter = filter;
+        }
+
+        ImGui.PopStyleVar(2);
+        ImGui.Spacing();
+    }
+
+    private void DrawSidebarToggleItem(string label, ref bool value, Vector4 color)
+    {
+        bool  active = value;
+        float gs     = ImGuiHelpers.GlobalScale;
+        float w      = ImGui.GetContentRegionAvail().X - 10f * gs;
+
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5f * gs);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding,   4f * gs);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
+
+        using (ImRaii.PushColor(ImGuiCol.Button,        active ? color with { W = 0.22f } : new Vector4(0.11f, 0.11f, 0.17f, 0.70f)))
+        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, color with { W = active ? 0.30f : 0.13f }))
+        using (ImRaii.PushColor(ImGuiCol.ButtonActive,  color with { W = 0.40f }))
+        using (ImRaii.PushColor(ImGuiCol.Text,          active ? color : ColSubtitle with { W = 0.70f }))
+        using (ImRaii.PushColor(ImGuiCol.Border,        active ? color with { W = 0.65f } : color with { W = 0.20f }))
+        {
+            if (ImGui.Button($"{label}##toggle{label}", new Vector2(w, 26f * gs)))
+            {
+                value = !value;
+                _filterCache.Clear();
+            }
         }
 
         ImGui.PopStyleVar(2);
@@ -499,7 +535,7 @@ public sealed class MainWindow : Window, IDisposable
         foreach (var ev in searched)
         {
             ImGui.PushID(ev.Id);
-            EventRenderer.DrawEventCard(ev, _stringCache.GetOrCompute(ev));
+            EventRenderer.DrawEventCard(ev, _stringCache.GetOrCompute(ev), _config);
             ImGui.PopID();
             ImGui.Dummy(new Vector2(0f, 5f * gs));
         }
@@ -541,6 +577,9 @@ public sealed class MainWindow : Window, IDisposable
 
         if (_sourceFilter != null)
             events = events.Where(e => e.Source == _sourceFilter);
+
+        if (_favoritesOnly)
+            events = events.Where(e => _config.FavoriteEventIds.Contains(e.Id));
 
         // Reroll shuffle seed each time the cache is refreshed
         if (_cache.LastRefresh != _lastSeenRefresh)

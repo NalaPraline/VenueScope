@@ -72,7 +72,7 @@ public static class EventRenderer
 
     // ── Public entry point ────────────────────────────────────────────────────
 
-    public static void DrawEventCard(VenueEvent ev, CachedEventStrings cached)
+    public static void DrawEventCard(VenueEvent ev, CachedEventStrings cached, Configuration config)
     {
         float   gs         = ImGuiHelpers.GlobalScale;
         Vector4 srcColor   = ev.Source == EventSource.Partake ? ColPartake : ColFFXIVenue;
@@ -103,7 +103,7 @@ public static class EventRenderer
         ImGui.Indent(indent);
 
         // ── Rows ─────────────────────────────────────────────────────────────
-        DrawTitleRow(ev, cached, srcColor);
+        DrawTitleRow(ev, cached, srcColor, config);
         DrawInfoRow(ev, cached, srcColor, statusColor);
         if (cached.Tags.Length > 0)
             DrawTags(ev.Id, cached.Tags, srcColor);
@@ -177,7 +177,7 @@ public static class EventRenderer
 
     // ── Rows ─────────────────────────────────────────────────────────────────
 
-    private static void DrawTitleRow(VenueEvent ev, CachedEventStrings cached, Vector4 srcColor)
+    private static void DrawTitleRow(VenueEvent ev, CachedEventStrings cached, Vector4 srcColor, Configuration config)
     {
         float gs    = ImGuiHelpers.GlobalScale;
         float actW  = CalcActionsWidth(ev);
@@ -206,7 +206,7 @@ public static class EventRenderer
             ImGui.TextUnformatted("NEW");
         }
 
-        DrawActions(ev, actW);
+        DrawActions(ev, actW, config);
     }
 
     private static void DrawInfoRow(VenueEvent ev, CachedEventStrings cached,
@@ -296,22 +296,43 @@ public static class EventRenderer
 
     // ── Actions ───────────────────────────────────────────────────────────────
 
+    private static readonly Vector4 ColFavOn  = new(1.00f, 0.82f, 0.14f, 1f);
+    private static readonly Vector4 ColFavOff = new(0.44f, 0.44f, 0.52f, 1f);
+
     private static float CalcActionsWidth(VenueEvent ev)
     {
         float gs  = ImGuiHelpers.GlobalScale;
         float spc = ImGui.GetStyle().ItemSpacing.X;
-        float w   = 0f;
+        float w   = 32f * gs + spc; // star button always present
         if (!string.IsNullOrEmpty(ev.EventUrl))       w += 52f * gs + spc;
         if (!string.IsNullOrEmpty(ev.LifestreamCode)) w += 90f * gs + spc;
         return w;
     }
 
-    private static void DrawActions(VenueEvent ev, float reservedW)
+    private static void DrawActions(VenueEvent ev, float reservedW, Configuration config)
     {
         if (reservedW <= 0f) return;
 
         float rightEdge = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
         ImGui.SameLine(rightEdge - reservedW);
+
+        // ── Favorite toggle ───────────────────────────────────────────────────
+        bool isFav = config.FavoriteEventIds.Contains(ev.Id);
+        using (ImRaii.PushColor(ImGuiCol.Button,        isFav ? new Vector4(0.28f, 0.22f, 0.04f, 0.70f) : new Vector4(0.14f, 0.14f, 0.20f, 0.60f)))
+        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, isFav ? new Vector4(0.40f, 0.32f, 0.06f, 0.90f) : new Vector4(0.22f, 0.22f, 0.30f, 0.90f)))
+        using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.50f, 0.40f, 0.08f, 1.00f)))
+        using (ImRaii.PushColor(ImGuiCol.Text,          isFav ? ColFavOn : ColFavOff))
+        {
+            if (ImGui.SmallButton($" {(isFav ? "\u2605" : "\u2606")} ##{ev.Id}fav"))
+            {
+                if (isFav) config.FavoriteEventIds.Remove(ev.Id);
+                else       config.FavoriteEventIds.Add(ev.Id);
+                config.Save();
+            }
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(isFav ? "Remove from favorites" : "Add to favorites");
+        ImGui.SameLine(0, 4);
 
         if (!string.IsNullOrEmpty(ev.EventUrl))
         {
