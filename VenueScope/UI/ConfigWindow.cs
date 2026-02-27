@@ -239,9 +239,17 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.TextColored(ColSubtitle, $"VenueScope  v{version}");
         ImGui.Spacing();
 
-        DrawLinkButton("Partake.gg",     "https://www.partake.gg/",      new Vector4(0.33f, 0.58f, 0.96f, 1f));
+        DrawLinkButton("Partake.gg",  "https://www.partake.gg/",  new Vector4(0.33f, 0.58f, 0.96f, 1f));
         ImGui.SameLine(0, 8);
-        DrawLinkButton("FFXIVenues",     "https://ffxivvenues.com/",     new Vector4(0.62f, 0.32f, 0.92f, 1f));
+        DrawLinkButton("FFXIVenues",  "https://ffxivvenues.com/", new Vector4(0.62f, 0.32f, 0.92f, 1f));
+
+        ImGui.Spacing();
+
+        DrawLinkButton("Discord", "https://discordid.netlify.app/?id=249633834646241281",
+            new Vector4(0.44f, 0.54f, 0.90f, 1f));
+        ImGui.SameLine(0, 8);
+        DrawLinkButton("X / Twitter", "https://x.com/MoroOkami",
+            new Vector4(0.80f, 0.80f, 0.80f, 1f));
 
         ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }
@@ -269,7 +277,7 @@ public sealed class ConfigWindow : Window, IDisposable
         using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, color with { W = 0.45f });
         using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  color with { W = 0.65f });
         using var c4 = ImRaii.PushColor(ImGuiCol.Text,          color);
-        if (ImGui.SmallButton($" {label} ↗ ##{label}"))
+        if (ImGui.SmallButton($" {label} ##{label}"))
             Dalamud.Utility.Util.OpenLink(url);
     }
 
