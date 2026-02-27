@@ -49,15 +49,15 @@ public sealed class Plugin : IDalamudPlugin
         _teamIconCache       = new TeamIconCache(TextureProvider, Log);
         EventRenderer.IconCache = _teamIconCache;
 
-        // UI
+        // UI — MapWindow must be created before MainWindow (Toggle ref passed in ctor)
         ConfigWindow = new ConfigWindow(Configuration, _partakeService, _cacheService);
         WindowSystem.AddWindow(ConfigWindow);
 
-        MainWindow = new MainWindow(_cacheService, _partakeService, Configuration, ConfigWindow.Toggle, MapWindow.Toggle);
-        WindowSystem.AddWindow(MainWindow);
-
         MapWindow = new MapWindow(_cacheService);
         WindowSystem.AddWindow(MapWindow);
+
+        MainWindow = new MainWindow(_cacheService, _partakeService, Configuration, ConfigWindow.Toggle, MapWindow.Toggle);
+        WindowSystem.AddWindow(MainWindow);
 
         // Commands
         CommandManager.AddHandler(CmdMain, new CommandInfo(OnCommand)
