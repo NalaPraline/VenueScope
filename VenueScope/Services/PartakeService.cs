@@ -7,7 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Text.RegularExpressions;
+using System.Text;
 using System.Threading.Tasks;
 using VenueScope.Models;
 
@@ -18,7 +18,7 @@ namespace VenueScope.Services;
 /// Uses pagination (100 per page) to retrieve ALL events.
 /// DC and server data is read from Lumina (live game data).
 /// </summary>
-public partial class PartakeService : IDisposable
+public class PartakeService : IDisposable
 {
     private readonly GraphQLHttpClient _graphQL;
     private readonly IPluginLog        _log;
@@ -190,9 +190,8 @@ public partial class PartakeService : IDisposable
         var result = new List<VenueEvent>(events.Count);
         foreach (var ev in events)
         {
-            // Strip non-ASCII (emojis, symbols)
-            var title       = CleanUnicode(ev.Title);
-            var description = CleanUnicode(ev.Description);
+            var title       = SanitizeTitle(ev.Title ?? string.Empty);
+            var description = SanitizeTitle(ev.Description ?? string.Empty);
 
             var serverName = ev.LocationData?.Server?.Name ?? string.Empty;
             var dcName     = ev.LocationData?.DataCenter?.Name ?? string.Empty;
@@ -237,11 +236,112 @@ public partial class PartakeService : IDisposable
         _                        => string.Empty,
     };
 
-    private static string CleanUnicode(string s)
-        => CleanUnicodeRegex().Replace(s, string.Empty).Trim();
+    /// <summary>
+    /// Sanitizes a title for ImGui display:
+    ///   - Maps fullwidth ASCII (ＡＢＣ) → regular ASCII (ABC)
+    ///   - Maps mathematical Unicode letters (𝒜𝓑𝕮 etc.) → ASCII equivalents
+    ///   - Keeps all other BMP characters (accented Latin, CJK, symbols…)
+    ///   - Drops unmappable supplementary-plane characters (emoji, unknown symbols)
+    /// </summary>
+    private static string SanitizeTitle(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
 
-    [GeneratedRegex(@"[^\u0000-\u007F]+")]
-    private static partial Regex CleanUnicodeRegex();
+        var sb = new StringBuilder(s.Length);
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+
+            // Fullwidth ASCII (U+FF01–U+FF5E) → regular ASCII (U+0021–U+007E)
+            if (c >= '\uFF01' && c <= '\uFF5E')
+            {
+                sb.Append((char)(c - 0xFF01 + 0x21));
+                continue;
+            }
+
+            // Surrogate pair = supplementary-plane character (U+10000+)
+            if (char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
+            {
+                int cp = char.ConvertToUtf32(c, s[i + 1]);
+                i++; // consume low surrogate
+                char? mapped = MathLetterToAscii(cp);
+                if (mapped.HasValue)
+                    sb.Append(mapped.Value);
+                // else: discard (emoji, unknown supplementary character)
+                continue;
+            }
+
+            // BMP character — keep as-is
+            sb.Append(c);
+        }
+
+        return sb.ToString().Trim();
+    }
+
+    /// <summary>
+    /// Maps a codepoint in the Mathematical Alphanumeric Symbols block
+    /// (U+1D400–U+1D7FF) to its ASCII equivalent letter or digit.
+    /// Returns null for codepoints outside that block.
+    /// </summary>
+    private static char? MathLetterToAscii(int cp)
+    {
+        // Uppercase base codepoints (where 'A' lives) for each math style
+        ReadOnlySpan<int> upperBases =
+        [
+            0x1D400, // Bold
+            0x1D434, // Italic
+            0x1D468, // Bold Italic
+            0x1D49C, // Script
+            0x1D4D0, // Bold Script
+            0x1D504, // Fraktur
+            0x1D538, // Double-Struck
+            0x1D56C, // Bold Fraktur
+            0x1D5A0, // Sans-Serif
+            0x1D5D4, // Sans-Serif Bold
+            0x1D608, // Sans-Serif Italic
+            0x1D63C, // Sans-Serif Bold Italic
+            0x1D670, // Monospace
+        ];
+
+        // Lowercase base codepoints (where 'a' lives) — base + 26 within each 52-char block
+        ReadOnlySpan<int> lowerBases =
+        [
+            0x1D41A, // Bold
+            0x1D44E, // Italic
+            0x1D482, // Bold Italic
+            0x1D4B6, // Script
+            0x1D4EA, // Bold Script
+            0x1D51E, // Fraktur
+            0x1D552, // Double-Struck
+            0x1D586, // Bold Fraktur
+            0x1D5BA, // Sans-Serif
+            0x1D5EE, // Sans-Serif Bold
+            0x1D622, // Sans-Serif Italic
+            0x1D656, // Sans-Serif Bold Italic
+            0x1D68A, // Monospace
+        ];
+
+        foreach (int b in upperBases)
+        {
+            int off = cp - b;
+            if ((uint)off < 26u) return (char)('A' + off);
+        }
+        foreach (int b in lowerBases)
+        {
+            int off = cp - b;
+            if ((uint)off < 26u) return (char)('a' + off);
+        }
+
+        // Mathematical digit styles (bold, double-struck, sans, sans-bold, monospace)
+        ReadOnlySpan<int> digitBases = [0x1D7CE, 0x1D7D8, 0x1D7E2, 0x1D7EC, 0x1D7F6];
+        foreach (int b in digitBases)
+        {
+            int off = cp - b;
+            if ((uint)off < 10u) return (char)('0' + off);
+        }
+
+        return null;
+    }
 
     // ── Lifestream code normalization ─────────────────────────────────────────
 
