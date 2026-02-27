@@ -105,7 +105,7 @@ public class FFXIVenueService : IDisposable
                     Server         = server,
                     DataCenter     = dc,
                     InGameLocation = locStr,
-                    LifestreamCode = string.Empty,
+                    LifestreamCode = BuildLifestreamCode(locObj),
                     BannerUrl      = banner,
                     Tags           = tags,
                     EventUrl       = website,
@@ -193,6 +193,47 @@ public class FFXIVenueService : IDisposable
         if (room is > 0)            parts.Add($"Room {room}");
 
         return string.Join(", ", parts);
+    }
+
+    /// <summary>
+    /// Builds a Lifestream-compatible teleport code from structured location data.
+    /// Format: "{World} {District} W{Ward} [Sub] P{Plot}" or "{World} {District} W{Ward} Apt{Apt}".
+    /// Falls back to "{World} - {override}" if only a free-text override is available.
+    /// Returns empty string if not enough data to build a useful code.
+    /// </summary>
+    private static string BuildLifestreamCode(JObject? loc)
+    {
+        if (loc == null) return string.Empty;
+
+        var world    = loc["world"]?.ToString();
+        if (string.IsNullOrEmpty(world)) return string.Empty;
+
+        var ward     = loc["ward"]?.Value<int>();
+        var plot     = loc["plot"]?.Value<int>();
+        var apt      = loc["apartment"]?.Value<int>();
+        var room     = loc["room"]?.Value<int>();
+        var district = loc["district"]?.ToString();
+        var sub      = loc["subdivision"]?.Value<bool>() ?? false;
+
+        // Structured location: need at least a ward
+        if (ward is > 0)
+        {
+            var parts = new List<string> { world };
+            if (!string.IsNullOrEmpty(district)) parts.Add(district);
+            parts.Add($"W{ward}");
+            if (sub) parts.Add("Sub");
+            if (plot is > 0)       parts.Add($"P{plot}");
+            else if (apt is > 0)   parts.Add($"Apt{apt}");
+            if (room is > 0)       parts.Add($"R{room}");
+            return string.Join(" ", parts);
+        }
+
+        // No structured ward — fall back to free-text override with server prefix
+        var ovr = loc["override"]?.ToString();
+        if (!string.IsNullOrWhiteSpace(ovr))
+            return $"{world} - {ovr}";
+
+        return string.Empty;
     }
 
     public void Dispose() => _http.Dispose();
