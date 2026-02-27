@@ -1,3 +1,4 @@
+using System;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
@@ -27,6 +28,27 @@ public static class EventRenderer
     private static readonly Vector4 ColTimeFut   = new(0.52f, 0.74f, 1.00f, 1f);
     private static readonly Vector4 ColNew       = new(1.00f, 0.80f, 0.16f, 1f);
     private static readonly Vector4 ColCardBg    = new(0.13f, 0.13f, 0.20f, 1.00f);
+
+    // ── Tag color palette ─────────────────────────────────────────────────────
+    private static readonly Vector4[] TagPalette =
+    [
+        new(0.96f, 0.45f, 0.45f, 1f), // coral
+        new(0.96f, 0.68f, 0.24f, 1f), // amber
+        new(0.40f, 0.88f, 0.52f, 1f), // mint
+        new(0.24f, 0.82f, 0.94f, 1f), // cyan
+        new(0.66f, 0.50f, 1.00f, 1f), // lavender
+        new(0.96f, 0.48f, 0.78f, 1f), // pink
+        new(0.42f, 0.72f, 1.00f, 1f), // sky blue
+        new(0.94f, 0.88f, 0.28f, 1f), // yellow
+        new(0.92f, 0.58f, 0.28f, 1f), // orange
+        new(0.42f, 0.94f, 0.80f, 1f), // turquoise
+    ];
+
+    public static Vector4 GetTagColor(string tag)
+    {
+        int hash = Math.Abs(tag.GetHashCode());
+        return TagPalette[hash % TagPalette.Length];
+    }
 
     // ── Layout constants (unscaled) ───────────────────────────────────────────
     private const float PadX    = 14f;
@@ -209,17 +231,14 @@ public static class EventRenderer
     private static void DrawTags(string evId, string[] tags, Vector4 srcColor)
     {
         ImGui.Spacing();
-        var bg  = srcColor with { W = 0.16f };
-        var bgh = srcColor with { W = 0.30f };
-        var txt = srcColor with { W = 0.82f };
-
         for (int i = 0; i < tags.Length; i++)
         {
             if (i > 0) ImGui.SameLine(0, 4);
-            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        bg);
-            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, bgh);
-            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  bgh);
-            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          txt);
+            var col = GetTagColor(tags[i]);
+            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        col with { W = 0.18f });
+            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, col with { W = 0.34f });
+            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  col with { W = 0.34f });
+            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          col with { W = 0.92f });
             ImGui.SmallButton($" {tags[i]} ##{evId}t{i}");
         }
     }

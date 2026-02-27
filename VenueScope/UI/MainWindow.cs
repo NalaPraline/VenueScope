@@ -387,14 +387,15 @@ public sealed class MainWindow : Window, IDisposable
         {
             var tag = tagKeys[i];
             var sel = tags[tag];
-            var bg  = sel ? ColAccent with { W = 0.22f }  : new Vector4(0.16f, 0.16f, 0.24f, 0.70f);
-            var bgh = sel ? ColAccent with { W = 0.38f }  : new Vector4(0.22f, 0.22f, 0.32f, 0.90f);
-            var txt = sel ? ColAccent : ColSubtitle;
+            var col = EventRenderer.GetTagColor(tag);
+            var bg  = sel ? col with { W = 0.28f } : col with { W = 0.09f };
+            var bgh = sel ? col with { W = 0.44f } : col with { W = 0.18f };
+            var txt = sel ? col with { W = 1.00f } : col with { W = 0.55f };
 
             ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 4f * gs);
             using (ImRaii.PushColor(ImGuiCol.Button,        bg))
             using (ImRaii.PushColor(ImGuiCol.ButtonHovered, bgh))
-            using (ImRaii.PushColor(ImGuiCol.ButtonActive,  bgh with { W = 1f }))
+            using (ImRaii.PushColor(ImGuiCol.ButtonActive,  col with { W = 0.55f }))
             using (ImRaii.PushColor(ImGuiCol.Text,          txt))
             {
                 if (ImGui.SmallButton($" {TruncTag(tag, 15)} ##st{cacheKey}{i}"))

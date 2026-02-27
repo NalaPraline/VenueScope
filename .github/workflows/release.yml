@@ -39,9 +39,9 @@ jobs:
       - name: Update pluginmaster.json
         run: |
           $version = "${{ github.ref_name }}" -replace '^v', ''
-          $json = Get-Content docs/pluginmaster.json -Raw | ConvertFrom-Json
-          $json[0].AssemblyVersion = $version
-          $json | ConvertTo-Json -Depth 10 | Set-Content docs/pluginmaster.json -Encoding UTF8
+          $content = Get-Content docs/pluginmaster.json -Raw
+          $content = $content -replace '"AssemblyVersion":\s*"[^"]*"', "`"AssemblyVersion`": `"$version`""
+          Set-Content docs/pluginmaster.json -Value $content -Encoding UTF8 -NoNewline
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/pluginmaster.json
