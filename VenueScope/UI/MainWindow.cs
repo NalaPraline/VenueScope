@@ -22,18 +22,25 @@ public sealed class MainWindow : Window, IDisposable
     private readonly EventStringCache  _stringCache = new();
     private readonly EventFilterCache  _filterCache = new();
 
-    private string      _searchText   = string.Empty;
-    private TimeFilter  _timeFilter   = TimeFilter.All;
-    private EventSource? _sourceFilter = null; // null = all sources
+    private string       _searchText    = string.Empty;
+    private TimeFilter   _timeFilter    = TimeFilter.All;
+    private EventSource? _sourceFilter  = null;
+    private string?      _selectedDcKey = null; // null = All Data Centers
 
-    private enum TimeFilter { All, LiveNow, Today }
+    private enum TimeFilter { All = 0, LiveNow = 1, Today = 2, Upcoming = 3 }
 
-    private static readonly string[] Regions = ["Japan", "North America", "Europe", "Oceania"];
-
+    // ── Palette ───────────────────────────────────────────────────────────────
     private static readonly Vector4 ColPartake   = new(0.33f, 0.58f, 0.96f, 1f);
     private static readonly Vector4 ColFFXIVenue = new(0.62f, 0.32f, 0.92f, 1f);
     private static readonly Vector4 ColAccent    = new(0.40f, 0.65f, 1.00f, 1f);
-    private static readonly Vector4 ColSubtitle  = new(0.55f, 0.55f, 0.65f, 1f);
+    private static readonly Vector4 ColSubtitle  = new(0.50f, 0.50f, 0.60f, 1f);
+    private static readonly Vector4 ColSidebarBg = new(0.09f, 0.09f, 0.14f, 1f);
+    private static readonly Vector4 ColTimeLive  = new(0.20f, 0.86f, 0.42f, 1f);
+    private static readonly Vector4 ColTimeToday = new(0.52f, 0.78f, 1.00f, 1f);
+    private static readonly Vector4 ColTimeUpcom = new(1.00f, 0.72f, 0.28f, 1f);
+    private static readonly Vector4 ColDivider   = new(0.22f, 0.22f, 0.32f, 1f);
+
+    private const float SidebarW = 165f; // unscaled px
 
     public MainWindow(EventCacheService cache, PartakeService partake, Configuration config, Action openConfig)
         : base("VenueScope##main", ImGuiWindowFlags.None)
@@ -56,7 +63,6 @@ public sealed class MainWindow : Window, IDisposable
     {
         base.OnOpen();
 
-        // Apply default filters from settings
         _timeFilter = _config.DefaultTimeFilter switch
         {
             1 => TimeFilter.LiveNow,
@@ -70,6 +76,10 @@ public sealed class MainWindow : Window, IDisposable
             _ => null,
         };
 
+        // Restore last DC selection
+        if (!string.IsNullOrEmpty(_config.SelectedDataCenter))
+            _selectedDcKey = _config.SelectedDataCenter;
+
         if (_cache.LastRefresh != DateTime.MinValue &&
             (DateTime.UtcNow - _cache.LastRefresh).TotalMinutes >= 5)
             Task.Run(_cache.RefreshNowAsync);
@@ -77,28 +87,75 @@ public sealed class MainWindow : Window, IDisposable
 
     public override void Draw()
     {
-        DrawHeader();
-        DrawBody();
+        float gs = ImGuiHelpers.GlobalScale;
+
+        DrawTopBar();
+        ImGui.Separator();
+
+        // ── Left sidebar (darker background, no scroll) ───────────────────────
+        {
+            using var color   = ImRaii.PushColor(ImGuiCol.ChildBg, ColSidebarBg);
+            using var sidebar = ImRaii.Child("##sidebar", new Vector2(SidebarW * gs, 0f), false,
+                                    ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+            if (sidebar.Success) DrawSidebar();
+        }
+
+        ImGui.SameLine(0, 0);
+
+        // Vertical divider
+        var lp0 = ImGui.GetCursorScreenPos();
+        ImGui.GetWindowDrawList().AddLine(
+            lp0, lp0 + new Vector2(0f, ImGui.GetContentRegionAvail().Y),
+            ImGui.ColorConvertFloat4ToU32(ColDivider), 1f);
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 1f);
+
+        // ── Main content ──────────────────────────────────────────────────────
+        using var main = ImRaii.Child("##maincontent", Vector2.Zero, false);
+        if (main.Success) DrawMainContent();
     }
 
-    // ══ Header ═══════════════════════════════════════════════════════════════
+    // ══ Top Bar ══════════════════════════════════════════════════════════════
 
-    private void DrawHeader()
+    private void DrawTopBar()
     {
-        var p0 = ImGui.GetCursorScreenPos();
-        var p1 = p0 + new Vector2(ImGui.GetContentRegionAvail().X,
-                                  ImGui.GetTextLineHeightWithSpacing() * 2.2f);
-        ImGui.GetWindowDrawList().AddRectFilled(
-            p0, p1, ImGui.ColorConvertFloat4ToU32(new Vector4(0.10f, 0.10f, 0.16f, 1f)));
-
+        float gs = ImGuiHelpers.GlobalScale;
         ImGui.Spacing();
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 6f * ImGuiHelpers.GlobalScale);
-        ImGui.TextColored(ColAccent, "VenueScope");
-        ImGui.SameLine(0, 6);
-        ImGui.TextColored(ColSubtitle, "FFXIV Community Event Browser");
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 6f * gs);
 
-        float rightSlot = ImGui.GetContentRegionAvail().X;
-        ImGui.SameLine(rightSlot - 320f * ImGuiHelpers.GlobalScale + ImGui.GetCursorPosX());
+        ImGui.TextColored(ColAccent, "VenueScope");
+        ImGui.SameLine(0, 8);
+        ImGui.TextColored(ColDivider, "—");
+        ImGui.SameLine(0, 8);
+
+        DrawDcCombo();
+
+        ImGui.SameLine(0, 8);
+
+        ImGui.SetNextItemWidth(200f * gs);
+        using (ImRaii.PushColor(ImGuiCol.FrameBg, new Vector4(0.14f, 0.14f, 0.20f, 1f)))
+            ImGui.InputTextWithHint("##search", "Search events...", ref _searchText, 128);
+
+        if (!string.IsNullOrWhiteSpace(_searchText))
+        {
+            ImGui.SameLine(0, 4);
+            using var _ = ImRaii.PushColor(ImGuiCol.Text, ColSubtitle);
+            if (ImGui.SmallButton("x##clrsearch")) _searchText = string.Empty;
+        }
+
+        // Right side
+        float btnReloadW   = ImGui.CalcTextSize("  Reload  ").X  + ImGui.GetStyle().FramePadding.X * 2;
+        float btnSettingsW = ImGui.CalcTextSize("  Settings  ").X + ImGui.GetStyle().FramePadding.X * 2;
+        float statusW      = 120f * gs;
+        ImGui.SameLine(ImGui.GetContentRegionMax().X - btnReloadW - btnSettingsW - statusW - 12f * gs);
+
+        if (_cache.IsRefreshing)
+            ImGui.TextColored(new Vector4(1f, 0.82f, 0.20f, 1f), "Loading...");
+        else if (_cache.LastRefresh != DateTime.MinValue)
+            ImGui.TextColored(ColSubtitle, _stringCache.GetLastUpdateString(_cache.LastRefresh.ToLocalTime()));
+        else
+            ImGui.TextColored(ColSubtitle, "Not loaded");
+
+        ImGui.SameLine(0, 8);
 
         using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.18f, 0.36f, 0.60f, 0.85f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.26f, 0.48f, 0.78f, 1.00f)))
@@ -112,30 +169,8 @@ public sealed class MainWindow : Window, IDisposable
             }
         }
 
-        ImGui.SameLine(0, 10);
-
-        if (_cache.IsRefreshing)
-            ImGui.TextColored(new Vector4(1f, 0.82f, 0.20f, 1f), "Loading...");
-        else if (_cache.LastError != null)
-            ImGui.TextColored(new Vector4(1f, 0.35f, 0.35f, 1f), "Error");
-        else if (_cache.LastRefresh != DateTime.MinValue)
-            ImGui.TextColored(ColSubtitle, _stringCache.GetLastUpdateString(_cache.LastRefresh.ToLocalTime()));
-        else
-            ImGui.TextColored(ColSubtitle, "Not loaded yet");
-
-        // Second line: counts on the left, Settings button on the right
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 6f * ImGuiHelpers.GlobalScale);
-        var pCount = _cache.CachedEvents.Count(e => e.Source == EventSource.Partake);
-        var fCount = _cache.CachedEvents.Count(e => e.Source == EventSource.FFXIVenue);
-        ImGui.TextColored(ColPartake,   $"{pCount} Partake");
         ImGui.SameLine(0, 6);
-        ImGui.TextColored(ColSubtitle,  "·");
-        ImGui.SameLine(0, 6);
-        ImGui.TextColored(ColFFXIVenue, $"{fCount} FFXIVenue");
 
-        // Settings button: right-aligned using CalcTextSize for scale-independent positioning
-        float btnW = ImGui.CalcTextSize("  Settings  ").X + ImGui.GetStyle().FramePadding.X * 2;
-        ImGui.SameLine(ImGui.GetContentRegionMax().X - btnW);
         using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.22f, 0.22f, 0.30f, 0.85f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.30f, 0.30f, 0.42f, 1.00f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.38f, 0.38f, 0.52f, 1.00f)))
@@ -145,324 +180,195 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
-        ImGui.Separator();
     }
 
-    // ══ Body ═════════════════════════════════════════════════════════════════
-
-    private void DrawBody()
+    private void DrawDcCombo()
     {
-        if (_cache.CachedEvents.Count == 0)
+        float  gs           = ImGuiHelpers.GlobalScale;
+        string currentLabel = _selectedDcKey ?? "All Data Centers";
+
+        ImGui.SetNextItemWidth(210f * gs);
+        using (ImRaii.PushColor(ImGuiCol.FrameBg,  new Vector4(0.14f, 0.14f, 0.20f, 1f)))
+        using (ImRaii.PushColor(ImGuiCol.PopupBg,  new Vector4(0.12f, 0.12f, 0.18f, 1f)))
         {
-            ImGui.Spacing();
-            ImGui.TextColored(ColSubtitle,
-                _cache.IsRefreshing
-                    ? "  Loading events, please wait..."
-                    : "  No events found. Click Reload to try again.");
-            return;
-        }
+            if (!ImGui.BeginCombo("##dccombo", currentLabel)) return;
 
-        // Region tabs
-        using var tabs = ImRaii.TabBar("##regions");
-        if (!tabs.Success) return;
+            if (ImGui.Selectable("All Data Centers", _selectedDcKey == null))
+                SetSelectedDc(null);
+            if (_selectedDcKey == null) ImGui.SetItemDefaultFocus();
 
-        for (int regionIdx = 1; regionIdx <= Regions.Length; regionIdx++)
-        {
-            var regionName = Regions[regionIdx - 1];
+            ImGui.Separator();
 
-            var flags = ImGuiTabItemFlags.None;
-            if (!_config.SelectedRegionSet && _config.SelectedRegion == regionName)
+            var regions = new (int idx, string name)[]
             {
-                flags |= ImGuiTabItemFlags.SetSelected;
-                _config.SelectedRegionSet = true;
+                (1, "Japan"), (2, "North America"), (3, "Europe"), (4, "Oceania"),
+            };
+
+            foreach (var (regionIdx, regionName) in regions)
+            {
+                var dcs = _partake.DataCenters.Values
+                    .Where(dc => dc.Region == regionIdx)
+                    .OrderBy(dc => dc.Name)
+                    .ToList();
+                if (dcs.Count == 0) continue;
+
+                using (ImRaii.PushColor(ImGuiCol.Text, ColSubtitle))
+                    ImGui.TextUnformatted($"  {regionName}");
+
+                foreach (var dc in dcs)
+                {
+                    bool sel = _selectedDcKey == dc.Name;
+                    if (ImGui.Selectable($"    {dc.Name}##{dc.Name}dc", sel))
+                        SetSelectedDc(dc.Name);
+                    if (sel) ImGui.SetItemDefaultFocus();
+                }
             }
 
-            var open = true;
-            using var tab = ImRaii.TabItem(regionName, ref open, flags);
-            if (!tab.Success) continue;
-
-            if (_config.SelectedRegion != regionName)
-            {
-                _config.SelectedRegion = regionName;
-                _config.Save();
-            }
-
-            DrawRegion(regionIdx);
-        }
-    }
-
-    private void DrawSourceFilterButton(string label, EventSource? source)
-    {
-        bool active = _sourceFilter == source;
-
-        Vector4 accentColor = source switch
-        {
-            EventSource.Partake   => ColPartake,
-            EventSource.FFXIVenue => ColFFXIVenue,
-            _                     => ColAccent,
-        };
-
-        var bg  = active ? accentColor with { W = 0.80f } : new Vector4(0.18f, 0.18f, 0.26f, 0.85f);
-        var bgh = active ? accentColor with { W = 1.00f } : new Vector4(0.26f, 0.26f, 0.36f, 1.00f);
-        var txt = active ? Vector4.One : new Vector4(0.65f, 0.65f, 0.70f, 1f);
-
-        using var c1 = ImRaii.PushColor(ImGuiCol.Button,        bg);
-        using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, bgh);
-        using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  accentColor);
-        using var c4 = ImRaii.PushColor(ImGuiCol.Text,          txt);
-
-        if (ImGui.SmallButton($" {label} ##sf{source?.ToString() ?? "all"}"))
-        {
-            _sourceFilter = source;
-            _filterCache.Clear();
-            // Clear source-keyed tag entries so they rebuild from the new event set
-            var keysToRemove = _cache.TagsByDc.Keys
-                .Where(k => k.Contains('_') && (k.EndsWith("_Partake") || k.EndsWith("_FFXIVenue")))
-                .ToList();
-            foreach (var k in keysToRemove) _cache.TagsByDc.Remove(k);
+            ImGui.EndCombo();
         }
     }
 
-    // ══ Region / DC ══════════════════════════════════════════════════════════
-
-    private void DrawRegion(int regionIdx)
+    private void SetSelectedDc(string? dcKey)
     {
-        var dcs = _partake.DataCenters.Values
-            .Where(dc => dc.Region == regionIdx)
-            .OrderBy(dc => dc.Name)
-            .ToList();
-
-        if (dcs.Count == 0)
-        {
-            ImGui.TextColored(ColSubtitle, "No data centers found for this region.");
-            return;
-        }
-
-        var regionEvents = dcs
-            .SelectMany(dc => _cache.EventsByDc.GetValueOrDefault(dc.Name) ?? new List<VenueEvent>())
-            .Where(e => _sourceFilter == null || e.Source == _sourceFilter)
-            .OrderBy(e => e.StartTime)
-            .ToList();
-
-        var noLocEvents = (_cache.EventsByDc.GetValueOrDefault("_no_location_") ?? new List<VenueEvent>())
-            .Where(e => _sourceFilter == null || e.Source == _sourceFilter)
-            .ToList();
-
-        using var dcTabs = ImRaii.TabBar($"##dc_{regionIdx}");
-        if (!dcTabs.Success) return;
-
-        // All tab
-        var allKey   = $"_all_{regionIdx}";
-        var allFlags = ImGuiTabItemFlags.None;
-        if (!_config.SelectedDataCenterSet && _config.SelectedDataCenter == allKey)
-        {
-            allFlags |= ImGuiTabItemFlags.SetSelected;
-            _config.SelectedDataCenterSet = true;
-        }
-        var allOpen = true;
-        using (var allTab = ImRaii.TabItem($"All ({regionEvents.Count})##all{regionIdx}", ref allOpen, allFlags))
-        {
-            if (allTab.Success)
-            {
-                _config.SelectedDataCenter = allKey;
-                DrawDataCenter(allKey, regionEvents);
-            }
-        }
-
-        // Per-DC tabs
-        foreach (var dc in dcs)
-        {
-            var dcEvents = (_cache.EventsByDc.GetValueOrDefault(dc.Name) ?? new List<VenueEvent>())
-                .Where(e => _sourceFilter == null || e.Source == _sourceFilter)
-                .ToList();
-
-            int count = dcEvents.Count;
-            var label = count > 0
-                ? $"{dc.Name} ({count})##{dc.Name}"
-                : $"{dc.Name}##{dc.Name}";
-
-            var flags = ImGuiTabItemFlags.None;
-            if (!_config.SelectedDataCenterSet && _config.SelectedDataCenter == dc.Name)
-            {
-                flags |= ImGuiTabItemFlags.SetSelected;
-                _config.SelectedDataCenterSet = true;
-            }
-
-            var open = true;
-            using var dcTab = ImRaii.TabItem(label, ref open, flags);
-            if (!dcTab.Success) continue;
-
-            _config.SelectedDataCenter = dc.Name;
-            DrawDataCenter(dc.Name, dcEvents);
-        }
-
-        // No Location tab
-        if (noLocEvents.Count > 0)
-        {
-            var open = true;
-            using var tab = ImRaii.TabItem($"No Location ({noLocEvents.Count})##noloc{regionIdx}", ref open);
-            if (tab.Success)
-                DrawDataCenter("_no_location_", noLocEvents);
-        }
+        _selectedDcKey = dcKey;
+        _filterCache.Clear();
+        _config.SelectedDataCenter = dcKey ?? string.Empty;
+        _config.Save();
     }
 
-    private void DrawDataCenter(string dcKey, List<VenueEvent> events)
+    // ══ Sidebar ══════════════════════════════════════════════════════════════
+
+    private void DrawSidebar()
     {
-        // Apply HideEndedEvents before anything else
-        if (_config.HideEndedEvents)
-        {
-            var now = DateTime.UtcNow;
-            events = events.Where(e => e.EndTime == null || e.EndTime.Value.ToUniversalTime() > now).ToList();
-        }
-
-        // Include source filter in cache key so tags stay source-specific
-        var cacheKey = _sourceFilter == null ? dcKey : $"{dcKey}_{_sourceFilter}";
-
-        if (!_cache.TagsByDc.TryGetValue(cacheKey, out var tags))
-        {
-            tags = new SortedDictionary<string, bool>();
-            foreach (var ev in events)
-                foreach (var tag in ev.Tags)
-                    if (!tags.ContainsKey(tag))
-                        tags[tag] = false;
-            _cache.TagsByDc[cacheKey] = tags;
-        }
+        float gs = ImGuiHelpers.GlobalScale;
+        float w  = ImGui.GetContentRegionAvail().X;
 
         ImGui.Spacing();
-        DrawFilterBar(cacheKey, tags);
 
-        var timeCount = ApplyTimeFilter(events).Count;
-        var summary   = _timeFilter != TimeFilter.All
-            ? $"  Showing {timeCount} of {events.Count} events"
-            : $"  {events.Count} event{(events.Count != 1 ? "s" : "")}";
-        ImGui.TextColored(ColSubtitle, summary);
+        // ── BROWSE ────────────────────────────────────────────────────────────
+        DrawSidebarLabel("BROWSE");
+        DrawSidebarTimeItem("● Live Now",  TimeFilter.LiveNow,  ColTimeLive);
+        DrawSidebarTimeItem("  Today",     TimeFilter.Today,    ColTimeToday);
+        DrawSidebarTimeItem("  Upcoming",  TimeFilter.Upcoming, ColTimeUpcom);
+        DrawSidebarTimeItem("  All",       TimeFilter.All,      ColSubtitle);
 
-        if (events.Count == 0)
+        ImGui.Spacing();
+        DrawSidebarRule();
+        ImGui.Spacing();
+
+        // ── SOURCE ────────────────────────────────────────────────────────────
+        DrawSidebarLabel("SOURCE");
+        DrawSidebarSourceItem("  All Sources",    null,                  ColAccent);
+        DrawSidebarSourceItem("  Partake.gg",     EventSource.Partake,   ColPartake);
+        DrawSidebarSourceItem("  FFXIVenues.com", EventSource.FFXIVenue, ColFFXIVenue);
+
+        ImGui.Spacing();
+        DrawSidebarRule();
+        ImGui.Spacing();
+
+        // ── TAGS ──────────────────────────────────────────────────────────────
+        DrawSidebarLabel("TAGS");
+        ImGui.Spacing();
+        DrawSidebarTags(w);
+    }
+
+    private void DrawSidebarLabel(string text)
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 6f * gs);
+        using var _ = ImRaii.PushColor(ImGuiCol.Text, ColSubtitle with { W = 0.45f });
+        ImGui.TextUnformatted(text);
+    }
+
+    private void DrawSidebarRule()
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+        var   p0 = ImGui.GetCursorScreenPos() + new Vector2(6f * gs, 0f);
+        var   p1 = p0 + new Vector2(ImGui.GetContentRegionAvail().X - 12f * gs, 1f);
+        ImGui.GetWindowDrawList().AddRectFilled(p0, p1, ImGui.ColorConvertFloat4ToU32(ColDivider));
+        ImGui.Dummy(new Vector2(0f, 1f));
+    }
+
+    private void DrawSidebarTimeItem(string label, TimeFilter filter, Vector4 color)
+    {
+        bool  active = _timeFilter == filter;
+        float gs     = ImGuiHelpers.GlobalScale;
+        float w      = ImGui.GetContentRegionAvail().X;
+        float h      = ImGui.GetTextLineHeightWithSpacing();
+
+        if (active)
         {
-            ImGui.Spacing();
-            ImGui.TextColored(ColSubtitle, "  No events on this data center.");
-            return;
+            var p0 = ImGui.GetCursorScreenPos();
+            var dl = ImGui.GetWindowDrawList();
+            dl.AddRectFilled(p0, p0 + new Vector2(w, h),
+                ImGui.ColorConvertFloat4ToU32(color with { W = 0.12f }));
+            dl.AddRectFilled(p0, p0 + new Vector2(3f * gs, h),
+                ImGui.ColorConvertFloat4ToU32(color with { W = 0.85f }));
         }
 
-        var selectedTags   = tags.Where(t => t.Value).Select(t => t.Key).ToList();
-        var tagFiltered    = _filterCache.GetFiltered(cacheKey, events, selectedTags);
-        var timeFiltered   = ApplyTimeFilter(tagFiltered);
-        var searchFiltered = ApplySearch(timeFiltered);
-
-        if (searchFiltered.Count == 0)
+        using (ImRaii.PushColor(ImGuiCol.Text,          active ? color : ColSubtitle with { W = 0.65f }))
+        using (ImRaii.PushColor(ImGuiCol.Header,        Vector4.Zero))
+        using (ImRaii.PushColor(ImGuiCol.HeaderHovered, color with { W = 0.08f }))
         {
-            ImGui.Spacing();
-            ImGui.TextColored(ColSubtitle, "  No events match the current filters.");
-            return;
-        }
-
-        using var child = ImRaii.Child($"##ev_{cacheKey}", Vector2.Zero, false);
-        if (!child.Success) return;
-
-        foreach (var ev in searchFiltered)
-        {
-            ImGui.PushID(ev.Id);
-            EventRenderer.DrawEventCard(ev, _stringCache.GetOrCompute(ev));
-            ImGui.PopID();
-            ImGui.Dummy(new Vector2(0, 5f * ImGuiHelpers.GlobalScale));
+            if (ImGui.Selectable($"{label}##tf{(int)filter}", active,
+                    ImGuiSelectableFlags.None, new Vector2(w, 0f)))
+                _timeFilter = filter;
         }
     }
 
-    // ══ Filter bar ═══════════════════════════════════════════════════════════
-
-    private const int TagInlineCap = 8; // above this, use popup instead of inline pills
-
-    private void DrawFilterBar(string dcKey, SortedDictionary<string, bool> tags)
+    private void DrawSidebarSourceItem(string label, EventSource? source, Vector4 color)
     {
-        DrawSourceFilterButton("All",       null);                      ImGui.SameLine(0, 4);
-        DrawSourceFilterButton("Partake",   EventSource.Partake);   ImGui.SameLine(0, 4);
-        DrawSourceFilterButton("FFXIVenue", EventSource.FFXIVenue);
+        bool  active = _sourceFilter == source;
+        float gs     = ImGuiHelpers.GlobalScale;
+        float w      = ImGui.GetContentRegionAvail().X;
+        float h      = ImGui.GetTextLineHeightWithSpacing();
 
-        ImGui.SameLine(0, 14);
-        ImGui.TextColored(new Vector4(0.30f, 0.30f, 0.38f, 1f), "|");
-        ImGui.SameLine(0, 14);
-
-        DrawTimeFilterButton("All",      TimeFilter.All);     ImGui.SameLine(0, 4);
-        DrawTimeFilterButton("Live Now", TimeFilter.LiveNow); ImGui.SameLine(0, 4);
-        DrawTimeFilterButton("Today",    TimeFilter.Today);
-
-        ImGui.SameLine(0, 16);
-
-        ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
-        using (ImRaii.PushColor(ImGuiCol.FrameBg, new Vector4(0.14f, 0.14f, 0.20f, 1f)))
-            ImGui.InputTextWithHint("##search", "Search events...", ref _searchText, 128);
-
-        if (!string.IsNullOrWhiteSpace(_searchText))
+        if (active)
         {
-            ImGui.SameLine(0, 6);
-            using var col = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.60f, 0.60f, 0.65f, 1f));
-            if (ImGui.SmallButton("x##clrsearch")) _searchText = string.Empty;
+            var p0 = ImGui.GetCursorScreenPos();
+            var dl = ImGui.GetWindowDrawList();
+            dl.AddRectFilled(p0, p0 + new Vector2(w, h),
+                ImGui.ColorConvertFloat4ToU32(color with { W = 0.12f }));
+            dl.AddRectFilled(p0, p0 + new Vector2(3f * gs, h),
+                ImGui.ColorConvertFloat4ToU32(color with { W = 0.85f }));
         }
 
-        if (tags.Count == 0) return;
-
-        if (tags.Count <= TagInlineCap)
+        using (ImRaii.PushColor(ImGuiCol.Text,          active ? color : ColSubtitle with { W = 0.65f }))
+        using (ImRaii.PushColor(ImGuiCol.Header,        Vector4.Zero))
+        using (ImRaii.PushColor(ImGuiCol.HeaderHovered, color with { W = 0.08f }))
         {
-            // ── Inline pills (Partake — few tags) ────────────────────────────
-            ImGui.SameLine(0, 18);
-            ImGui.TextColored(ColSubtitle, "Tags:");
-            int i = 0;
-            foreach (var tag in tags.Keys.ToList())
+            if (ImGui.Selectable($"{label}##src{source?.ToString() ?? "all"}", active,
+                    ImGuiSelectableFlags.None, new Vector2(w, 0f)))
             {
-                ImGui.SameLine(0, i == 0 ? 6 : 4);
-                DrawTagTogglePill(tag, tags, dcKey, i);
-                i++;
+                _sourceFilter = source;
+                _filterCache.Clear();
             }
         }
-        else
-        {
-            // ── Popup button (FFXIVenue — many tags) ─────────────────────────
-            DrawTagPopupButton(dcKey, tags);
-        }
     }
 
-    private void DrawTagPopupButton(string dcKey, SortedDictionary<string, bool> tags)
+    private void DrawSidebarTags(float sidebarW)
     {
-        ImGui.SameLine(0, 18);
+        float  gs       = ImGuiHelpers.GlobalScale;
+        string cacheKey = BuildCacheKey();
+        EnsureTagsBuilt(cacheKey);
+
+        if (!_cache.TagsByDc.TryGetValue(cacheKey, out var tags) || tags.Count == 0)
+        {
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 6f * gs);
+            using var _ = ImRaii.PushColor(ImGuiCol.Text, ColSubtitle with { W = 0.30f });
+            ImGui.TextUnformatted("None");
+            return;
+        }
 
         int activeCount = tags.Values.Count(v => v);
-        var popupId = $"##tagpopup_{dcKey}";
-
-        var label = activeCount > 0
-            ? $" Tags  ({activeCount} active) ##tagbtn_{dcKey}"
-            : $" Tags  ({tags.Count}) ##tagbtn_{dcKey}";
-
-        var bg = activeCount > 0
-            ? new Vector4(0.28f, 0.55f, 0.95f, 0.85f)
-            : new Vector4(0.20f, 0.20f, 0.28f, 0.85f);
-        var bgh = bg with { W = 1f };
-
-        using (ImRaii.PushColor(ImGuiCol.Button,        bg))
-        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, bgh))
-        using (ImRaii.PushColor(ImGuiCol.ButtonActive,  bgh))
-        {
-            if (ImGui.SmallButton(label))
-                ImGui.OpenPopup(popupId);
-        }
-
-        ImGui.SetNextWindowSizeConstraints(
-            new Vector2(300f * ImGuiHelpers.GlobalScale, 80f  * ImGuiHelpers.GlobalScale),
-            new Vector2(520f * ImGuiHelpers.GlobalScale, 400f * ImGuiHelpers.GlobalScale));
-
-        using var popup = ImRaii.Popup(popupId);
-        if (!popup.Success) return;
-
-        ImGui.TextColored(ColSubtitle, $"Filter by tag  —  {tags.Count} available");
-        ImGui.Separator();
-        ImGui.Spacing();
-
         if (activeCount > 0)
         {
-            using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.45f, 0.15f, 0.15f, 0.80f)))
-            using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.60f, 0.20f, 0.20f, 1.00f)))
-            using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.70f, 0.25f, 0.25f, 1.00f)))
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 4f * gs);
+            using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.45f, 0.12f, 0.12f, 0.60f)))
+            using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.60f, 0.18f, 0.18f, 0.90f)))
+            using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.70f, 0.22f, 0.22f, 1.00f)))
             {
-                if (ImGui.SmallButton("  Clear all  ##clrtags"))
+                if (ImGui.SmallButton("  Clear  ##clrtags"))
                 {
                     foreach (var k in tags.Keys.ToList()) tags[k] = false;
                     _filterCache.Clear();
@@ -471,55 +377,147 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.Spacing();
         }
 
-        // Tags as wrapping pills — 3 per row
-        var tagKeys = tags.Keys.ToList();
-        float popupWidth    = ImGui.GetContentRegionAvail().X;
-        float pillEstimate  = 110f * ImGuiHelpers.GlobalScale;
-        int   cols          = Math.Max(1, (int)(popupWidth / pillEstimate));
+        // Scrollable tag area (takes remaining sidebar height)
+        float tagAreaH = ImGui.GetContentRegionAvail().Y - 4f * gs;
+        using var tagChild = ImRaii.Child("##tagslist", new Vector2(0f, tagAreaH), false);
+        if (!tagChild.Success) return;
 
+        var tagKeys = tags.Keys.ToList();
         for (int i = 0; i < tagKeys.Count; i++)
         {
-            if (i % cols != 0) ImGui.SameLine(0, 6);
-            DrawTagTogglePill(tagKeys[i], tags, dcKey, i);
-        }
+            var tag = tagKeys[i];
+            var sel = tags[tag];
+            var bg  = sel ? ColAccent with { W = 0.22f }  : new Vector4(0.16f, 0.16f, 0.24f, 0.70f);
+            var bgh = sel ? ColAccent with { W = 0.38f }  : new Vector4(0.22f, 0.22f, 0.32f, 0.90f);
+            var txt = sel ? ColAccent : ColSubtitle;
 
-        ImGui.Spacing();
-    }
-
-    private void DrawTagTogglePill(string tag, SortedDictionary<string, bool> tags, string dcKey, int i)
-    {
-        var sel = tags[tag];
-        var bg  = sel ? new Vector4(0.28f, 0.55f, 0.95f, 0.85f) : new Vector4(0.20f, 0.20f, 0.28f, 0.85f);
-        var bgh = sel ? new Vector4(0.38f, 0.65f, 1.00f, 1.00f) : new Vector4(0.28f, 0.28f, 0.38f, 1.00f);
-
-        using (ImRaii.PushColor(ImGuiCol.Button,        bg))
-        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, bgh))
-        using (ImRaii.PushColor(ImGuiCol.ButtonActive,  bgh))
-        {
-            if (ImGui.SmallButton($" {tag} ##t{dcKey}{i}"))
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 4f * gs);
+            using (ImRaii.PushColor(ImGuiCol.Button,        bg))
+            using (ImRaii.PushColor(ImGuiCol.ButtonHovered, bgh))
+            using (ImRaii.PushColor(ImGuiCol.ButtonActive,  bgh with { W = 1f }))
+            using (ImRaii.PushColor(ImGuiCol.Text,          txt))
             {
-                tags[tag] = !tags[tag];
-                _filterCache.Clear();
+                if (ImGui.SmallButton($" {TruncTag(tag, 15)} ##st{cacheKey}{i}"))
+                {
+                    tags[tag] = !tags[tag];
+                    _filterCache.Clear();
+                }
+                if (ImGui.IsItemHovered() && tag.Length > 15)
+                    ImGui.SetTooltip(tag);
             }
         }
     }
 
-    private void DrawTimeFilterButton(string label, TimeFilter filter)
+    // ══ Main Content ══════════════════════════════════════════════════════════
+
+    private void DrawMainContent()
     {
-        bool active = _timeFilter == filter;
-        var bgOn    = new Vector4(0.22f, 0.50f, 0.88f, 1.00f);
-        var bgOff   = new Vector4(0.18f, 0.18f, 0.26f, 0.90f);
-        var bgHov   = active ? bgOn with { W = 0.85f } : new Vector4(0.26f, 0.26f, 0.36f, 1f);
+        float gs = ImGuiHelpers.GlobalScale;
 
-        using var c1 = ImRaii.PushColor(ImGuiCol.Button,        active ? bgOn : bgOff);
-        using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, bgHov);
-        using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  bgOn);
+        var baseEvents = GetBaseEvents();
+        if (_config.HideEndedEvents)
+        {
+            var now = DateTime.UtcNow;
+            baseEvents = baseEvents.Where(e => e.EndTime == null || e.EndTime.Value.ToUniversalTime() > now).ToList();
+        }
 
-        if (ImGui.SmallButton($" {label} ##tf{(int)filter}"))
-            _timeFilter = filter;
+        if (baseEvents.Count == 0 && _cache.CachedEvents.Count == 0)
+        {
+            ImGui.Spacing();
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 8f * gs);
+            ImGui.TextColored(ColSubtitle,
+                _cache.IsRefreshing
+                    ? "Loading events, please wait..."
+                    : "No events found. Click Reload to try again.");
+            return;
+        }
+
+        string cacheKey = BuildCacheKey();
+        EnsureTagsBuilt(cacheKey);
+        _cache.TagsByDc.TryGetValue(cacheKey, out var tags);
+
+        var selectedTags = tags?.Where(t => t.Value).Select(t => t.Key).ToList() ?? new List<string>();
+        var tagFiltered  = _filterCache.GetFiltered(cacheKey, baseEvents, selectedTags);
+        var timeFiltered = ApplyTimeFilter(tagFiltered);
+        var searched     = ApplySearch(timeFiltered);
+
+        // ── Summary ───────────────────────────────────────────────────────────
+        ImGui.Spacing();
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 8f * gs);
+
+        string dcLabel = _selectedDcKey ?? "All Data Centers";
+        string tfLabel = _timeFilter switch
+        {
+            TimeFilter.LiveNow  => "Live Now",
+            TimeFilter.Today    => "Today",
+            TimeFilter.Upcoming => "Upcoming",
+            _                   => "All",
+        };
+        string srcLabel = _sourceFilter switch
+        {
+            EventSource.Partake   => "  ·  Partake",
+            EventSource.FFXIVenue => "  ·  FFXIVenues",
+            _                     => string.Empty,
+        };
+        ImGui.TextColored(ColSubtitle,
+            $"{dcLabel}  ·  {tfLabel}{srcLabel}  ·  {searched.Count} event{(searched.Count != 1 ? "s" : "")}");
+
+        ImGui.Spacing();
+
+        if (searched.Count == 0)
+        {
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 8f * gs);
+            ImGui.TextColored(ColSubtitle,
+                baseEvents.Count == 0
+                    ? "No events on this data center."
+                    : "No events match the current filters.");
+            return;
+        }
+
+        // ── Event list ────────────────────────────────────────────────────────
+        using var child = ImRaii.Child("##evlist", Vector2.Zero, false);
+        if (!child.Success) return;
+
+        foreach (var ev in searched)
+        {
+            ImGui.PushID(ev.Id);
+            EventRenderer.DrawEventCard(ev, _stringCache.GetOrCompute(ev));
+            ImGui.PopID();
+            ImGui.Dummy(new Vector2(0f, 5f * gs));
+        }
     }
 
-    // ══ Filtering ════════════════════════════════════════════════════════════
+    // ══ Helpers ═══════════════════════════════════════════════════════════════
+
+    private string BuildCacheKey()
+    {
+        string dcPart  = _selectedDcKey ?? "_global_all";
+        string srcPart = _sourceFilter?.ToString() ?? "all";
+        return $"{dcPart}|{srcPart}";
+    }
+
+    private void EnsureTagsBuilt(string cacheKey)
+    {
+        if (_cache.TagsByDc.ContainsKey(cacheKey)) return;
+        var tags = new SortedDictionary<string, bool>();
+        foreach (var ev in GetBaseEvents())
+            foreach (var tag in ev.Tags)
+                if (!tags.ContainsKey(tag))
+                    tags[tag] = false;
+        _cache.TagsByDc[cacheKey] = tags;
+    }
+
+    private List<VenueEvent> GetBaseEvents()
+    {
+        IEnumerable<VenueEvent> events = _selectedDcKey == null
+            ? _cache.CachedEvents
+            : (_cache.EventsByDc.GetValueOrDefault(_selectedDcKey) ?? Enumerable.Empty<VenueEvent>());
+
+        if (_sourceFilter != null)
+            events = events.Where(e => e.Source == _sourceFilter);
+
+        return events.OrderBy(e => e.StartTime).ToList();
+    }
 
     private List<VenueEvent> ApplyTimeFilter(List<VenueEvent> events)
     {
@@ -543,6 +541,8 @@ public sealed class MainWindow : Window, IDisposable
                        (endDate.HasValue && startDate <= todayDate && endDate.Value >= todayDate);
             }).ToList(),
 
+            TimeFilter.Upcoming => events.Where(e => e.StartTime.ToUniversalTime() > utcNow).ToList(),
+
             _ => events,
         };
     }
@@ -558,6 +558,9 @@ public sealed class MainWindow : Window, IDisposable
             e.Tags.Any(t => t.Contains(q, StringComparison.OrdinalIgnoreCase))
         ).ToList();
     }
+
+    private static string TruncTag(string tag, int maxLen) =>
+        tag.Length <= maxLen ? tag : tag[..(maxLen - 1)] + "\u2026";
 
     public void Dispose() { }
 }

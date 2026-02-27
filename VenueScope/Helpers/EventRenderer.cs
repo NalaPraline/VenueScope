@@ -8,12 +8,12 @@ using VenueScope.Models;
 namespace VenueScope.Helpers;
 
 /// <summary>
-/// Renders a styled event card: dark background panel, source-color left
-/// accent, status dot, compact two-line layout, and right-aligned actions.
+/// Renders a styled event card: thumbnail placeholder, dark background, source
+/// accent bar, status dot, and right-aligned action buttons.
 /// </summary>
 public static class EventRenderer
 {
-    // ── Palette ──────────────────────────────────────────────────────────────
+    // ── Palette ───────────────────────────────────────────────────────────────
     private static readonly Vector4 ColPartake   = new(0.33f, 0.58f, 0.96f, 1f);
     private static readonly Vector4 ColFFXIVenue = new(0.62f, 0.32f, 0.92f, 1f);
 
@@ -26,68 +26,96 @@ public static class EventRenderer
     private static readonly Vector4 ColTimeEnded = new(0.38f, 0.38f, 0.44f, 1f);
     private static readonly Vector4 ColTimeFut   = new(0.52f, 0.74f, 1.00f, 1f);
     private static readonly Vector4 ColNew       = new(1.00f, 0.80f, 0.16f, 1f);
-    private static readonly Vector4 ColCardBg    = new(0.15f, 0.15f, 0.22f, 1.00f);
+    private static readonly Vector4 ColCardBg    = new(0.13f, 0.13f, 0.20f, 1.00f);
+
+    // ── Layout constants (unscaled) ───────────────────────────────────────────
+    private const float PadX    = 14f;
+    private const float PadY    = 7f;
+    private const float ThumbW  = 50f;
+    private const float ThumbH  = 42f;
+    private const float ThumbGap = 8f;
 
     // ── Public entry point ────────────────────────────────────────────────────
 
     public static void DrawEventCard(VenueEvent ev, CachedEventStrings cached)
     {
-        float   gs          = ImGuiHelpers.GlobalScale;
-        Vector4 srcColor    = ev.Source == EventSource.Partake ? ColPartake : ColFFXIVenue;
+        float   gs         = ImGuiHelpers.GlobalScale;
+        Vector4 srcColor   = ev.Source == EventSource.Partake ? ColPartake : ColFFXIVenue;
         Vector4 statusColor = StatusColor(cached);
 
-        // Capture card bounds before drawing anything
         float cardW  = ImGui.GetContentRegionAvail().X;
         var   cardTL = ImGui.GetCursorScreenPos();
         var   dl     = ImGui.GetWindowDrawList();
-        float padX   = 16f * gs;
-        float padY   = 7f  * gs;
 
-        // Channel 1 = content (foreground), channel 0 = background
+        float padX      = PadX * gs;
+        float padY      = PadY * gs;
+        float thumbW    = ThumbW  * gs;
+        float thumbH    = ThumbH  * gs;
+        float thumbGap  = ThumbGap * gs;
+        float indent    = padX + thumbW + thumbGap;
+
+        // Split channels: 1 = foreground (ImGui widgets), 0 = background (DrawList)
         dl.ChannelsSplit(2);
         dl.ChannelsSetCurrent(1);
 
-        // ── Top padding + status dot ──────────────────────────────────────────
+        // Top padding
         ImGui.Dummy(new Vector2(0f, padY));
 
+        // Status dot — sits in the left margin next to the accent bar
         var dotCenter = cardTL + new Vector2(8f * gs, padY + ImGui.GetTextLineHeight() * 0.52f);
-        dl.AddCircleFilled(dotCenter, 3.5f * gs,
-            ImGui.ColorConvertFloat4ToU32(statusColor));
+        dl.AddCircleFilled(dotCenter, 3.5f * gs, ImGui.ColorConvertFloat4ToU32(statusColor));
 
-        ImGui.Indent(padX);
+        ImGui.Indent(indent);
 
-        // ── Row 1 : title + action buttons ───────────────────────────────────
+        // ── Rows ─────────────────────────────────────────────────────────────
         DrawTitleRow(ev, cached, srcColor);
-
-        // ── Row 2 : info line ─────────────────────────────────────────────────
         DrawInfoRow(ev, cached, srcColor, statusColor);
-
-        // ── Row 3 : tags ─────────────────────────────────────────────────────
         if (cached.Tags.Length > 0)
             DrawTags(ev.Id, cached.Tags, srcColor);
-
-        // ── Row 4 : description (collapsible) ────────────────────────────────
         if (!string.IsNullOrEmpty(ev.Description))
             DrawDescription(ev);
 
-        ImGui.Dummy(new Vector2(0f, padY)); // bottom padding
-        ImGui.Unindent(padX);
+        ImGui.Dummy(new Vector2(0f, padY));
+        ImGui.Unindent(indent);
 
-        // ── Background + left accent (channel 0 = rendered behind content) ───
+        // ── Background layer ─────────────────────────────────────────────────
         var cardBR = new Vector2(cardTL.X + cardW, ImGui.GetCursorScreenPos().Y);
 
         dl.ChannelsSetCurrent(0);
+
+        // Card background
         dl.AddRectFilled(cardTL, cardBR,
             ImGui.ColorConvertFloat4ToU32(ColCardBg), 6f * gs);
+
+        // Left accent bar (source color)
         dl.AddRectFilled(
             cardTL + new Vector2(0f, 4f * gs),
             new Vector2(cardTL.X + 3f * gs, cardBR.Y - 4f * gs),
             ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.90f }), 2f);
 
+        // Thumbnail placeholder
+        float thumbTop  = cardTL.Y + padY;
+        float thumbLeft = cardTL.X + padX;
+        var   tTL       = new Vector2(thumbLeft, thumbTop);
+        var   tBR       = tTL + new Vector2(thumbW, thumbH);
+
+        dl.AddRectFilled(tTL, tBR,
+            ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.13f }), 4f * gs);
+        dl.AddRect(tTL, tBR,
+            ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.30f }), 4f * gs, 0, gs);
+
+        // Source initial centered in thumbnail
+        string initial  = ev.Source == EventSource.Partake ? "P" : "V";
+        var    initSz   = ImGui.CalcTextSize(initial);
+        dl.AddText(
+            tTL + new Vector2((thumbW - initSz.X) * 0.5f, (thumbH - initSz.Y) * 0.5f),
+            ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.40f }),
+            initial);
+
         dl.ChannelsMerge();
     }
 
-    // ── Rows ──────────────────────────────────────────────────────────────────
+    // ── Rows ─────────────────────────────────────────────────────────────────
 
     private static void DrawTitleRow(VenueEvent ev, CachedEventStrings cached, Vector4 srcColor)
     {
@@ -96,7 +124,6 @@ public static class EventRenderer
         float avail = ImGui.GetContentRegionAvail().X - actW - 6f * gs;
         float lineH = ImGui.GetTextLineHeight();
 
-        // Clip title so it never wraps
         var p0 = ImGui.GetCursorScreenPos();
         ImGui.PushClipRect(p0, p0 + new Vector2(avail, lineH + 2f), true);
 
@@ -125,7 +152,7 @@ public static class EventRenderer
     private static void DrawInfoRow(VenueEvent ev, CachedEventStrings cached,
                                     Vector4 srcColor, Vector4 statusColor)
     {
-        // Source
+        // Source badge
         using (ImRaii.PushColor(ImGuiCol.Text, srcColor with { W = 0.50f }))
             ImGui.TextUnformatted(ev.Source == EventSource.Partake ? "Partake" : "FFXIVenue");
 
@@ -150,7 +177,7 @@ public static class EventRenderer
                         ? cached.Location
                         : $"{cached.ServerDc} \u2013 {cached.Location}");
                 if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Click to copy");
+                    ImGui.SetTooltip("Click to copy location");
             }
         }
 
@@ -218,7 +245,7 @@ public static class EventRenderer
         float spc = ImGui.GetStyle().ItemSpacing.X;
         float w   = 0f;
         if (!string.IsNullOrEmpty(ev.EventUrl))       w += 52f * gs + spc;
-        if (!string.IsNullOrEmpty(ev.LifestreamCode)) w += 40f * gs + spc;
+        if (!string.IsNullOrEmpty(ev.LifestreamCode)) w += 90f * gs + spc;
         return w;
     }
 
@@ -243,14 +270,14 @@ public static class EventRenderer
 
         if (!string.IsNullOrEmpty(ev.LifestreamCode))
         {
-            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.30f, 0.12f, 0.50f, 0.65f));
-            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.42f, 0.18f, 0.68f, 0.90f));
-            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.52f, 0.24f, 0.82f, 1.00f));
-            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.84f, 0.70f, 1.00f, 1.00f));
-            if (ImGui.SmallButton($" /li ##{ev.Id}"))
+            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.18f, 0.36f, 0.22f, 0.65f));
+            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.24f, 0.52f, 0.30f, 0.90f));
+            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.30f, 0.64f, 0.38f, 1.00f));
+            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.62f, 1.00f, 0.70f, 1.00f));
+            if (ImGui.SmallButton($" Teleport ##{ev.Id}"))
                 ImGui.SetClipboardText($"/li {ev.LifestreamCode}");
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip($"/li {ev.LifestreamCode}\n\nPaste in FFXIV chat to teleport.");
+                ImGui.SetTooltip($"Copy teleport code\n/li {ev.LifestreamCode}");
         }
     }
 
