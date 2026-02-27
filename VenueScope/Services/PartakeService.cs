@@ -214,7 +214,7 @@ public partial class PartakeService : IDisposable
                 Server           = serverName,
                 DataCenter       = dcName,
                 InGameLocation   = ev.Location,
-                LifestreamCode   = ev.Location,
+                LifestreamCode   = NormalizeLifestreamCode(ev.Location, serverName),
                 Tags             = tags,
                 EventUrl         = $"https://www.partake.gg/events/{ev.Id}",
                 Source           = EventSource.Partake,
@@ -242,6 +242,90 @@ public partial class PartakeService : IDisposable
 
     [GeneratedRegex(@"[^\u0000-\u007F]+")]
     private static partial Regex CleanUnicodeRegex();
+
+    // ── Lifestream code normalization ─────────────────────────────────────────
+
+    /// <summary>
+    /// Tries to correct the server name in a free-text Lifestream location string.
+    /// Priority: use the validated server name from locationData (Partake dropdown).
+    /// Fallback: fuzzy-match the first token against the Lumina server list.
+    /// </summary>
+    private string NormalizeLifestreamCode(string raw, string serverNameFromApi)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return raw;
+
+        var (first, sep, tail) = SplitFirstToken(raw.Trim());
+        string firstLower = first.ToLowerInvariant();
+
+        if (!string.IsNullOrEmpty(serverNameFromApi))
+        {
+            int dist = Levenshtein(firstLower, serverNameFromApi.ToLowerInvariant());
+
+            if (dist == 0) return raw; // Already correct
+
+            if (dist <= 2)
+            {
+                // Typo — replace with correct spelling
+                return string.IsNullOrEmpty(tail)
+                    ? serverNameFromApi
+                    : $"{serverNameFromApi}{sep}{tail}";
+            }
+
+            // First token doesn't match the authoritative server name.
+            // If it doesn't look like any server either, prepend the correct one.
+            bool firstIsAnyServer = Servers.Values
+                .Any(s => Levenshtein(firstLower, s.Name.ToLowerInvariant()) <= 1);
+
+            return firstIsAnyServer
+                ? raw                                              // Looks like a different server — keep as-is
+                : $"{serverNameFromApi} - {raw}";                 // No server found — prepend it
+        }
+        else
+        {
+            // No authoritative name — fuzzy match the first token
+            var best = Servers.Values
+                .Select(s => (s.Name, Dist: Levenshtein(firstLower, s.Name.ToLowerInvariant())))
+                .Where(x => x.Dist <= 2)
+                .OrderBy(x => x.Dist)
+                .FirstOrDefault();
+
+            if (best.Name == null || best.Dist == 0) return raw;
+
+            return string.IsNullOrEmpty(tail)
+                ? best.Name
+                : $"{best.Name}{sep}{tail}";
+        }
+    }
+
+    private static (string first, string sep, string tail) SplitFirstToken(string s)
+    {
+        foreach (var sep in new[] { " - ", " \u2013 ", ", " })
+        {
+            int i = s.IndexOf(sep, StringComparison.Ordinal);
+            if (i > 0) return (s[..i].Trim(), sep, s[(i + sep.Length)..].Trim());
+        }
+        int sp = s.IndexOf(' ');
+        return sp > 0 ? (s[..sp], " ", s[(sp + 1)..]) : (s, "", "");
+    }
+
+    private static int Levenshtein(string a, string b)
+    {
+        int n = a.Length, m = b.Length;
+        if (n == 0) return m;
+        if (m == 0) return n;
+        var d = new int[n + 1, m + 1];
+        for (int i = 0; i <= n; i++) d[i, 0] = i;
+        for (int j = 0; j <= m; j++) d[0, j] = j;
+        for (int i = 1; i <= n; i++)
+            for (int j = 1; j <= m; j++)
+            {
+                int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                d[i, j] = Math.Min(
+                    Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1),
+                    d[i - 1, j - 1] + cost);
+            }
+        return d[n, m];
+    }
 
     public void Dispose() => _graphQL.Dispose();
 }
