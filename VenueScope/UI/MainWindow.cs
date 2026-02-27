@@ -22,10 +22,13 @@ public sealed class MainWindow : Window, IDisposable
     private readonly EventStringCache  _stringCache = new();
     private readonly EventFilterCache  _filterCache = new();
 
-    private string          _searchText    = string.Empty;
-    private TimeFilter      _timeFilter    = TimeFilter.All;
-    private EventSource?    _sourceFilter  = null;
+    private string          _searchText     = string.Empty;
+    private TimeFilter      _timeFilter     = TimeFilter.All;
+    private EventSource?    _sourceFilter   = null;
     private HashSet<string> _selectedDcKeys = new(); // empty = All Data Centers
+
+    private int      _shuffleSeed     = Environment.TickCount;
+    private DateTime _lastSeenRefresh = DateTime.MinValue;
 
     private enum TimeFilter { All = 0, LiveNow = 1, Today = 2, Upcoming = 3 }
 
@@ -539,7 +542,38 @@ public sealed class MainWindow : Window, IDisposable
         if (_sourceFilter != null)
             events = events.Where(e => e.Source == _sourceFilter);
 
-        return events.OrderBy(e => e.StartTime).ToList();
+        // Reroll shuffle seed each time the cache is refreshed
+        if (_cache.LastRefresh != _lastSeenRefresh)
+        {
+            _lastSeenRefresh = _cache.LastRefresh;
+            _shuffleSeed     = _cache.LastRefresh.GetHashCode() ^ Environment.TickCount;
+        }
+
+        var rng  = new Random(_shuffleSeed);
+        var list = events
+            .Select(e => (ev: e, group: GetSortGroup(e), rnd: rng.NextDouble()))
+            .OrderBy(x => x.group)
+            .ThenBy(x => x.rnd)
+            .Select(x => x.ev)
+            .ToList();
+
+        return list;
+    }
+
+    // 0 = live now · 1 = opening within 2h · 2 = everything else
+    private static int GetSortGroup(VenueEvent e)
+    {
+        var now   = DateTime.UtcNow;
+        var start = e.StartTime.ToUniversalTime();
+        var end   = e.EndTime?.ToUniversalTime();
+
+        if (start <= now && (end == null || end.Value > now))
+            return 0;
+
+        if (start > now && (start - now).TotalHours <= 2.0)
+            return 1;
+
+        return 2;
     }
 
     private List<VenueEvent> ApplyTimeFilter(List<VenueEvent> events)
