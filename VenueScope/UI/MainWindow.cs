@@ -22,10 +22,10 @@ public sealed class MainWindow : Window, IDisposable
     private readonly EventStringCache  _stringCache = new();
     private readonly EventFilterCache  _filterCache = new();
 
-    private string       _searchText    = string.Empty;
-    private TimeFilter   _timeFilter    = TimeFilter.All;
-    private EventSource? _sourceFilter  = null;
-    private string?      _selectedDcKey = null; // null = All Data Centers
+    private string          _searchText    = string.Empty;
+    private TimeFilter      _timeFilter    = TimeFilter.All;
+    private EventSource?    _sourceFilter  = null;
+    private HashSet<string> _selectedDcKeys = new(); // empty = All Data Centers
 
     private enum TimeFilter { All = 0, LiveNow = 1, Today = 2, Upcoming = 3 }
 
@@ -76,9 +76,10 @@ public sealed class MainWindow : Window, IDisposable
             _ => null,
         };
 
-        // Restore last DC selection
-        if (!string.IsNullOrEmpty(_config.SelectedDataCenter))
-            _selectedDcKey = _config.SelectedDataCenter;
+        // Restore last DC selection (multi); fall back to legacy single if needed
+        _selectedDcKeys = new HashSet<string>(_config.SelectedDataCenters);
+        if (_selectedDcKeys.Count == 0 && !string.IsNullOrEmpty(_config.SelectedDataCenter))
+            _selectedDcKeys.Add(_config.SelectedDataCenter);
 
         if (_cache.LastRefresh != DateTime.MinValue &&
             (DateTime.UtcNow - _cache.LastRefresh).TotalMinutes >= 5)
@@ -182,20 +183,27 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
     }
 
+    private string DcComboLabel => _selectedDcKeys.Count switch
+    {
+        0 => "All Data Centers",
+        1 => _selectedDcKeys.First(),
+        _ => $"{_selectedDcKeys.Count} Data Centers",
+    };
+
     private void DrawDcCombo()
     {
-        float  gs           = ImGuiHelpers.GlobalScale;
-        string currentLabel = _selectedDcKey ?? "All Data Centers";
+        float gs = ImGuiHelpers.GlobalScale;
 
         ImGui.SetNextItemWidth(210f * gs);
         using (ImRaii.PushColor(ImGuiCol.FrameBg,  new Vector4(0.14f, 0.14f, 0.20f, 1f)))
         using (ImRaii.PushColor(ImGuiCol.PopupBg,  new Vector4(0.12f, 0.12f, 0.18f, 1f)))
         {
-            if (!ImGui.BeginCombo("##dccombo", currentLabel)) return;
+            if (!ImGui.BeginCombo("##dccombo", DcComboLabel)) return;
 
-            if (ImGui.Selectable("All Data Centers", _selectedDcKey == null))
-                SetSelectedDc(null);
-            if (_selectedDcKey == null) ImGui.SetItemDefaultFocus();
+            bool allSel = _selectedDcKeys.Count == 0;
+            if (ImGui.Selectable("All Data Centers", allSel, ImGuiSelectableFlags.DontClosePopups))
+                ClearDcSelection();
+            if (allSel) ImGui.SetItemDefaultFocus();
 
             ImGui.Separator();
 
@@ -217,10 +225,9 @@ public sealed class MainWindow : Window, IDisposable
 
                 foreach (var dc in dcs)
                 {
-                    bool sel = _selectedDcKey == dc.Name;
-                    if (ImGui.Selectable($"    {dc.Name}##{dc.Name}dc", sel))
-                        SetSelectedDc(dc.Name);
-                    if (sel) ImGui.SetItemDefaultFocus();
+                    bool ticked = _selectedDcKeys.Contains(dc.Name);
+                    if (ImGui.Checkbox($"  {dc.Name}##{dc.Name}dc", ref ticked))
+                        ToggleDc(dc.Name);
                 }
             }
 
@@ -228,11 +235,20 @@ public sealed class MainWindow : Window, IDisposable
         }
     }
 
-    private void SetSelectedDc(string? dcKey)
+    private void ToggleDc(string dcName)
     {
-        _selectedDcKey = dcKey;
+        if (!_selectedDcKeys.Remove(dcName))
+            _selectedDcKeys.Add(dcName);
         _filterCache.Clear();
-        _config.SelectedDataCenter = dcKey ?? string.Empty;
+        _config.SelectedDataCenters = _selectedDcKeys.ToList();
+        _config.Save();
+    }
+
+    private void ClearDcSelection()
+    {
+        _selectedDcKeys.Clear();
+        _filterCache.Clear();
+        _config.SelectedDataCenters = new List<string>();
         _config.Save();
     }
 
@@ -446,7 +462,7 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 8f * gs);
 
-        string dcLabel = _selectedDcKey ?? "All Data Centers";
+        string dcLabel = DcComboLabel;
         string tfLabel = _timeFilter switch
         {
             TimeFilter.LiveNow  => "Live Now",
@@ -492,7 +508,9 @@ public sealed class MainWindow : Window, IDisposable
 
     private string BuildCacheKey()
     {
-        string dcPart  = _selectedDcKey ?? "_global_all";
+        string dcPart  = _selectedDcKeys.Count == 0
+            ? "_global_all"
+            : string.Join(",", _selectedDcKeys.OrderBy(x => x));
         string srcPart = _sourceFilter?.ToString() ?? "all";
         return $"{dcPart}|{srcPart}";
     }
@@ -510,9 +528,15 @@ public sealed class MainWindow : Window, IDisposable
 
     private List<VenueEvent> GetBaseEvents()
     {
-        IEnumerable<VenueEvent> events = _selectedDcKey == null
-            ? _cache.CachedEvents
-            : (_cache.EventsByDc.GetValueOrDefault(_selectedDcKey) ?? Enumerable.Empty<VenueEvent>());
+        IEnumerable<VenueEvent> events;
+
+        if (_selectedDcKeys.Count == 0)
+            events = _cache.CachedEvents;
+        else if (_selectedDcKeys.Count == 1)
+            events = _cache.EventsByDc.GetValueOrDefault(_selectedDcKeys.First()) ?? Enumerable.Empty<VenueEvent>();
+        else
+            events = _selectedDcKeys.SelectMany(dc =>
+                _cache.EventsByDc.GetValueOrDefault(dc) ?? Enumerable.Empty<VenueEvent>());
 
         if (_sourceFilter != null)
             events = events.Where(e => e.Source == _sourceFilter);

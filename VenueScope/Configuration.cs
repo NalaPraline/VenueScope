@@ -10,8 +10,9 @@ public class Configuration : IPluginConfiguration
     public int Version { get; set; } = 1;
 
     // ── Navigation memory ──────────────────────────────────────────────────
-    public string SelectedRegion     { get; set; } = string.Empty;
-    public string SelectedDataCenter { get; set; } = string.Empty;
+    public string       SelectedRegion      { get; set; } = string.Empty;
+    public string       SelectedDataCenter  { get; set; } = string.Empty; // legacy single-DC
+    public List<string> SelectedDataCenters { get; set; } = new();
 
     // ── Sources ────────────────────────────────────────────────────────────
     public bool ShowPartakeEvents   { get; set; } = true;
