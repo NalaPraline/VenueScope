@@ -1,18 +1,22 @@
-[
-  {
-    "Author": "Nala Praline",
-    "Name": "VenueScope",
-    "InternalName": "VenueScope",
-    "AssemblyVersion": "1.0.0.3",
-    "Punchline": "Browse FFXIV community events in-game.",
-    "Description": "Browse FFXIV community events from Partake.gg and FFXIVenue directly in-game. Filter by data center, time, and tags. Copy Lifestream teleport codes in one click.\n\nCommands:\n/venuescope or /vs — Open VenueScope",
-    "ApplicableVersion": "any",
-    "DalamudApiLevel": 14,
-    "Tags": ["events", "venue", "community", "partake", "ffxivenue"],
-    "IconUrl": "https://raw.githubusercontent.com/NalaPraline/VenueScope/main/Data/icon.png",
-    "RepoUrl": "https://github.com/NalaPraline/VenueScope",
-    "DownloadLinkInstall": "https://github.com/NalaPraline/VenueScope/releases/latest/download/latest.zip",
-    "DownloadLinkTesting": "https://github.com/NalaPraline/VenueScope/releases/latest/download/latest.zip",
-    "DownloadLinkUpdate": "https://github.com/NalaPraline/VenueScope/releases/latest/download/latest.zip"
-  }
-]
+{
+  "Author": "Nala Praline",
+  "Name": "VenueScope",
+  "InternalName": "VenueScope",
+  "AssemblyVersion": "1.0.0.3",
+  "Punchline": "Browse FFXIV community events in-game.",
+  "Description": "Browse FFXIV community events from Partake.gg and FFXIVenue directly in-game. Filter by data center, time, and tags. Copy Lifestream teleport codes in one click.\n\nCommands:\n/venuescope or /vs — Open VenueScope",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 14,
+  "Tags": [
+    "events",
+    "venue",
+    "community",
+    "partake",
+    "ffxivenue"
+  ],
+  "IconUrl": "https://raw.githubusercontent.com/NalaPraline/VenueScope/main/Data/icon.png",
+  "RepoUrl": "https://github.com/NalaPraline/VenueScope",
+  "DownloadLinkInstall": "https://github.com/NalaPraline/VenueScope/releases/latest/download/latest.zip",
+  "DownloadLinkTesting": "https://github.com/NalaPraline/VenueScope/releases/latest/download/latest.zip",
+  "DownloadLinkUpdate": "https://github.com/NalaPraline/VenueScope/releases/latest/download/latest.zip"
+}
