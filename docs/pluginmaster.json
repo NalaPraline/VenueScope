@@ -3,7 +3,7 @@
     "Author": "Nala Praline",
     "Name": "VenueScope",
     "InternalName": "VenueScope",
-    "AssemblyVersion": "1.0.1.9",
+    "AssemblyVersion": "1.0.2.0",
     "Punchline": "Browse FFXIV community events in-game.",
     "Description": "Browse FFXIV community events from Partake.gg and FFXIVenue directly in-game. Filter by data center, time, and tags. Copy Lifestream teleport codes in one click.\n\nCommands:\n/venuescope or /vs — Open VenueScope",
     "ApplicableVersion": "any",
