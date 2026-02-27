@@ -388,9 +388,9 @@ public sealed class MainWindow : Window, IDisposable
             var tag = tagKeys[i];
             var sel = tags[tag];
             var col = EventRenderer.GetTagColor(tag);
-            var bg  = sel ? col with { W = 0.28f } : col with { W = 0.09f };
-            var bgh = sel ? col with { W = 0.44f } : col with { W = 0.18f };
-            var txt = sel ? col with { W = 1.00f } : col with { W = 0.55f };
+            var bg  = sel ? col with { W = 0.45f } : col with { W = 0.22f };
+            var bgh = sel ? col with { W = 0.62f } : col with { W = 0.36f };
+            var txt = sel ? col with { W = 1.00f } : col with { W = 0.85f };
 
             ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 4f * gs);
             using (ImRaii.PushColor(ImGuiCol.Button,        bg))

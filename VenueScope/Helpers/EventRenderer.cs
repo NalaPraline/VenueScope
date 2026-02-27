@@ -46,8 +46,13 @@ public static class EventRenderer
 
     public static Vector4 GetTagColor(string tag)
     {
-        int hash = Math.Abs(tag.GetHashCode());
-        return TagPalette[hash % TagPalette.Length];
+        // Stable hash (GetHashCode is randomized per-session in .NET 5+)
+        unchecked
+        {
+            int h = 17;
+            foreach (char c in tag) h = h * 31 + c;
+            return TagPalette[Math.Abs(h) % TagPalette.Length];
+        }
     }
 
     // ── Layout constants (unscaled) ───────────────────────────────────────────
@@ -235,10 +240,10 @@ public static class EventRenderer
         {
             if (i > 0) ImGui.SameLine(0, 4);
             var col = GetTagColor(tags[i]);
-            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        col with { W = 0.18f });
-            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, col with { W = 0.34f });
-            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  col with { W = 0.34f });
-            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          col with { W = 0.92f });
+            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        col with { W = 0.28f });
+            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, col with { W = 0.48f });
+            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  col with { W = 0.60f });
+            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          col with { W = 1.00f });
             ImGui.SmallButton($" {tags[i]} ##{evId}t{i}");
         }
     }
