@@ -147,7 +147,7 @@ public sealed class MainWindow : Window, IDisposable
         float btnReloadW   = ImGui.CalcTextSize("  Reload  ").X  + ImGui.GetStyle().FramePadding.X * 2;
         float btnSettingsW = ImGui.CalcTextSize("  Settings  ").X + ImGui.GetStyle().FramePadding.X * 2;
         float statusW      = 120f * gs;
-        ImGui.SameLine(ImGui.GetContentRegionMax().X - btnReloadW - btnSettingsW - statusW - 12f * gs);
+        ImGui.SameLine(ImGui.GetContentRegionMax().X - btnReloadW - btnSettingsW - statusW - 32f * gs);
 
         if (_cache.IsRefreshing)
             ImGui.TextColored(new Vector4(1f, 0.82f, 0.20f, 1f), "Loading...");
