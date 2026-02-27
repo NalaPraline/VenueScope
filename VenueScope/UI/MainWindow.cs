@@ -200,8 +200,10 @@ public sealed class MainWindow : Window, IDisposable
         {
             if (!ImGui.BeginCombo("##dccombo", DcComboLabel)) return;
 
+            // "All" clears selection — DontClosePopups keeps the dropdown open
             bool allSel = _selectedDcKeys.Count == 0;
-            if (ImGui.Selectable("All Data Centers", allSel, ImGuiSelectableFlags.DontClosePopups))
+            if (ImGui.Selectable(allSel ? "[x] All Data Centers" : "[ ] All Data Centers",
+                    allSel, ImGuiSelectableFlags.DontClosePopups))
                 ClearDcSelection();
             if (allSel) ImGui.SetItemDefaultFocus();
 
@@ -226,7 +228,9 @@ public sealed class MainWindow : Window, IDisposable
                 foreach (var dc in dcs)
                 {
                     bool ticked = _selectedDcKeys.Contains(dc.Name);
-                    if (ImGui.Checkbox($"  {dc.Name}##{dc.Name}dc", ref ticked))
+                    string tick  = ticked ? "[x]" : "[ ]";
+                    if (ImGui.Selectable($"  {tick} {dc.Name}##{dc.Name}dc",
+                            ticked, ImGuiSelectableFlags.DontClosePopups))
                         ToggleDc(dc.Name);
                 }
             }
