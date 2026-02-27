@@ -162,17 +162,7 @@ public sealed class MainWindow : Window, IDisposable
             return;
         }
 
-        // Source filter pills
-        ImGui.Spacing();
-        DrawSourceFilterButton("All",        null);
-        ImGui.SameLine(0, 4);
-        DrawSourceFilterButton("Partake",    EventSource.Partake);
-        ImGui.SameLine(0, 4);
-        DrawSourceFilterButton("FFXIVenue",  EventSource.FFXIVenue);
-        ImGui.Spacing();
-        ImGui.Separator();
-
-        // Region tabs (unchanged from working version)
+        // Region tabs
         using var tabs = ImRaii.TabBar("##regions");
         if (!tabs.Success) return;
 
@@ -346,7 +336,6 @@ public sealed class MainWindow : Window, IDisposable
             ? $"  Showing {timeCount} of {events.Count} events"
             : $"  {events.Count} event{(events.Count != 1 ? "s" : "")}";
         ImGui.TextColored(ColSubtitle, summary);
-        ImGui.Separator();
 
         if (events.Count == 0)
         {
@@ -372,19 +361,10 @@ public sealed class MainWindow : Window, IDisposable
 
         foreach (var ev in searchFiltered)
         {
-            ImGui.Spacing();
             ImGui.PushID(ev.Id);
             EventRenderer.DrawEventCard(ev, _stringCache.GetOrCompute(ev));
             ImGui.PopID();
-            ImGui.Spacing();
-
-            var dl  = ImGui.GetWindowDrawList();
-            var sep = ImGui.GetCursorScreenPos();
-            dl.AddLine(
-                new Vector2(sep.X + 20f, sep.Y),
-                new Vector2(sep.X + ImGui.GetContentRegionAvail().X - 20f, sep.Y),
-                ImGui.ColorConvertFloat4ToU32(new Vector4(0.25f, 0.25f, 0.32f, 1f)));
-            ImGui.Dummy(new Vector2(0, 2f));
+            ImGui.Dummy(new Vector2(0, 5f * ImGuiHelpers.GlobalScale));
         }
     }
 
@@ -394,6 +374,14 @@ public sealed class MainWindow : Window, IDisposable
 
     private void DrawFilterBar(string dcKey, SortedDictionary<string, bool> tags)
     {
+        DrawSourceFilterButton("All",       null);                      ImGui.SameLine(0, 4);
+        DrawSourceFilterButton("Partake",   EventSource.Partake);   ImGui.SameLine(0, 4);
+        DrawSourceFilterButton("FFXIVenue", EventSource.FFXIVenue);
+
+        ImGui.SameLine(0, 14);
+        ImGui.TextColored(new Vector4(0.30f, 0.30f, 0.38f, 1f), "|");
+        ImGui.SameLine(0, 14);
+
         DrawTimeFilterButton("All",      TimeFilter.All);     ImGui.SameLine(0, 4);
         DrawTimeFilterButton("Live Now", TimeFilter.LiveNow); ImGui.SameLine(0, 4);
         DrawTimeFilterButton("Today",    TimeFilter.Today);
