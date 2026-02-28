@@ -19,7 +19,7 @@ public class Configuration : IPluginConfiguration
     public bool ShowFFXIVenueEvents { get; set; } = true;
 
     // ── Refresh ────────────────────────────────────────────────────────────
-    public int RefreshIntervalMinutes { get; set; } = 15;
+    public int RefreshIntervalMinutes { get; set; } = 5;
 
     // Last known event IDs for NEW-badge detection (JSON array)
     public string LastKnownEventIds { get; set; } = "[]";
