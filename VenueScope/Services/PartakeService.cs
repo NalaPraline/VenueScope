@@ -357,28 +357,60 @@ public class PartakeService : IDisposable
         var (first, sep, tail) = SplitFirstToken(raw.Trim());
         string firstLower = first.ToLowerInvariant();
 
+        string result;
+
         if (!string.IsNullOrEmpty(serverNameFromApi))
         {
             int dist = Levenshtein(firstLower, serverNameFromApi.ToLowerInvariant());
 
-            if (dist == 0) return raw; // Already correct
-
-            if (dist <= 2)
+            if (dist == 0)
             {
-                // Typo — replace with correct spelling
-                return string.IsNullOrEmpty(tail)
-                    ? serverNameFromApi
-                    : $"{serverNameFromApi}{sep}{tail}";
+                // Already correct server at start — just clean up the tail
+                result = string.IsNullOrEmpty(tail) ? first : $"{first} {tail}";
             }
+            else if (dist <= 2)
+            {
+                // Typo at start — replace with correct spelling
+                result = string.IsNullOrEmpty(tail)
+                    ? serverNameFromApi
+                    : $"{serverNameFromApi} {tail}";
+            }
+            else
+            {
+                // First token doesn't match the authoritative server name.
+                bool firstIsAnyServer = Servers.Values
+                    .Any(s => Levenshtein(firstLower, s.Name.ToLowerInvariant()) <= 1);
 
-            // First token doesn't match the authoritative server name.
-            // If it doesn't look like any server either, prepend the correct one.
-            bool firstIsAnyServer = Servers.Values
-                .Any(s => Levenshtein(firstLower, s.Name.ToLowerInvariant()) <= 1);
+                if (firstIsAnyServer)
+                {
+                    // Looks like a valid (different) server — keep it, just clean up
+                    result = string.IsNullOrEmpty(tail) ? first : $"{first} {tail}";
+                }
+                else
+                {
+                    // Check if the server name is hiding at the end of the tail
+                    string tailLower = tail.ToLowerInvariant();
+                    var (_, __, lastPart) = SplitLastToken(tail);
+                    bool tailEndsWithServer = !string.IsNullOrEmpty(lastPart) &&
+                        Levenshtein(lastPart.ToLowerInvariant(), serverNameFromApi.ToLowerInvariant()) <= 2;
 
-            return firstIsAnyServer
-                ? raw                                              // Looks like a different server — keep as-is
-                : $"{serverNameFromApi} - {raw}";                 // No server found — prepend it
+                    if (tailEndsWithServer)
+                    {
+                        // e.g. "Goblet W8 P12 | Mateus" — reorder to "Mateus Goblet W8 P12"
+                        string locationPart = StripTrailingServer(tail, lastPart);
+                        result = string.IsNullOrEmpty(locationPart)
+                            ? $"{serverNameFromApi} {first}"
+                            : $"{serverNameFromApi} {first} {locationPart}";
+                    }
+                    else
+                    {
+                        // No server found anywhere — prepend it
+                        result = string.IsNullOrEmpty(tail)
+                            ? $"{serverNameFromApi} {first}"
+                            : $"{serverNameFromApi} {first} {tail}";
+                    }
+                }
+            }
         }
         else
         {
@@ -389,17 +421,65 @@ public class PartakeService : IDisposable
                 .OrderBy(x => x.Dist)
                 .FirstOrDefault();
 
-            if (best.Name == null || best.Dist == 0) return raw;
-
-            return string.IsNullOrEmpty(tail)
-                ? best.Name
-                : $"{best.Name}{sep}{tail}";
+            if (best.Name == null || best.Dist == 0)
+                result = raw;
+            else
+                result = string.IsNullOrEmpty(tail)
+                    ? best.Name
+                    : $"{best.Name} {tail}";
         }
+
+        return CleanLifestreamCode(result);
+    }
+
+    /// <summary>Removes stray / and | characters left over after normalization.</summary>
+    private static string CleanLifestreamCode(string s)
+    {
+        // Replace separator characters with a space, then collapse runs of whitespace
+        var sb = new StringBuilder(s.Length);
+        bool lastWasSpace = false;
+        foreach (char c in s)
+        {
+            if (c == '/' || c == '|')
+            {
+                if (!lastWasSpace) { sb.Append(' '); lastWasSpace = true; }
+            }
+            else if (c == ' ')
+            {
+                if (!lastWasSpace) { sb.Append(' '); lastWasSpace = true; }
+            }
+            else
+            {
+                sb.Append(c);
+                lastWasSpace = false;
+            }
+        }
+        return sb.ToString().Trim();
+    }
+
+    /// <summary>Splits off the last token from a string using the same separator set.</summary>
+    private static (string head, string sep, string last) SplitLastToken(string s)
+    {
+        foreach (var sep in new[] { " | ", " / ", " - ", " \u2013 ", ", " })
+        {
+            int i = s.LastIndexOf(sep, StringComparison.Ordinal);
+            if (i >= 0) return (s[..i].Trim(), sep, s[(i + sep.Length)..].Trim());
+        }
+        int sp = s.LastIndexOf(' ');
+        return sp >= 0 ? (s[..sp].Trim(), " ", s[(sp + 1)..].Trim()) : ("", "", s);
+    }
+
+    /// <summary>Removes the trailing server token from a location string.</summary>
+    private static string StripTrailingServer(string tail, string serverToken)
+    {
+        int idx = tail.LastIndexOf(serverToken, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return tail;
+        return tail[..idx].Trim(' ', '-', '|', '/', ',', '\u2013');
     }
 
     private static (string first, string sep, string tail) SplitFirstToken(string s)
     {
-        foreach (var sep in new[] { " - ", " \u2013 ", ", " })
+        foreach (var sep in new[] { " - ", " \u2013 ", ", ", " / ", " | " })
         {
             int i = s.IndexOf(sep, StringComparison.Ordinal);
             if (i > 0) return (s[..i].Trim(), sep, s[(i + sep.Length)..].Trim());
