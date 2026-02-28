@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Threading.Tasks;
 using Dalamud.Plugin.Services;
 using Newtonsoft.Json.Linq;
@@ -232,6 +233,31 @@ public class FFXIVenueService : IDisposable
             return $"{world} - {ovr}";
 
         return string.Empty;
+    }
+
+    /// <summary>
+    /// Sends a flag report for a venue to the FFXIVenues API.
+    /// </summary>
+    public async Task<bool> FlagVenueAsync(string venueId, string category, string description)
+    {
+        try
+        {
+            var payload = new JObject
+            {
+                ["venueId"]     = venueId,
+                ["category"]    = category,
+                ["description"] = description,
+            };
+            var content  = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
+            var response = await _http.PutAsync(
+                $"https://api.ffxivvenues.com/v1.0/venue/{venueId}/flag", content);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"[FFXIVenue] Flag error: {ex.Message}");
+            return false;
+        }
     }
 
     public void Dispose() => _http.Dispose();
