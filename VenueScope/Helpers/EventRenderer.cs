@@ -33,6 +33,16 @@ public static class EventRenderer
     /// <summary>Set by Plugin on startup. Used to fetch team icon textures.</summary>
     public static Services.TeamIconCache? IconCache;
 
+    /// <summary>Set by Plugin on startup. Used to submit venue flag reports.</summary>
+    public static Services.FFXIVenueService? FlagService;
+
+    // ── Flag popup state (one popup at a time) ────────────────────────────────
+    private static string _flagVenueId  = string.Empty;
+    private static int    _flagCategory = 0;
+    private static string _flagDesc     = string.Empty;
+    private static bool   _flagBusy     = false;
+    private static string _flagStatus   = string.Empty; // "" | "ok" | "err"
+
     private static IDalamudTextureWrap? GetIcon(VenueEvent ev) =>
         IconCache?.GetOrQueue(
             !string.IsNullOrEmpty(ev.TeamIconUrl) ? ev.TeamIconUrl : ev.BannerUrl);
@@ -173,6 +183,9 @@ public static class EventRenderer
         }
 
         dl.ChannelsMerge();
+
+        // Flag popup — drawn here so it sits inside the same child window context
+        DrawFlagPopup();
     }
 
     // ── Rows ─────────────────────────────────────────────────────────────────
@@ -306,6 +319,7 @@ public static class EventRenderer
         float w   = 32f * gs + spc; // star button always present
         if (!string.IsNullOrEmpty(ev.EventUrl))       w += 52f * gs + spc;
         if (!string.IsNullOrEmpty(ev.LifestreamCode)) w += 90f * gs + spc;
+        if (ev.Source == EventSource.FFXIVenue)       w += 32f * gs + spc; // flag button
         return w;
     }
 
@@ -356,7 +370,110 @@ public static class EventRenderer
                 Plugin.CommandManager.ProcessCommand($"/li {ev.LifestreamCode}");
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip($"/li {ev.LifestreamCode}");
+            ImGui.SameLine(0, 4);
         }
+
+        // ── Flag button (FFXIVenue only) ──────────────────────────────────────
+        if (ev.Source == EventSource.FFXIVenue)
+        {
+            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.35f, 0.12f, 0.12f, 0.65f));
+            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.55f, 0.18f, 0.18f, 0.90f));
+            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.70f, 0.22f, 0.22f, 1.00f));
+            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(1.00f, 0.40f, 0.40f, 1.00f));
+            if (ImGui.SmallButton($" \u2691 ##{ev.Id}flag"))
+            {
+                _flagVenueId  = ev.Id.StartsWith("ffxivenue-") ? ev.Id[10..] : ev.Id;
+                _flagCategory = 0;
+                _flagDesc     = string.Empty;
+                _flagStatus   = string.Empty;
+                _flagBusy     = false;
+                ImGui.OpenPopup("##venueflagpopup");
+            }
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Report this venue");
+        }
+    }
+
+    // ── Flag popup ────────────────────────────────────────────────────────────
+
+    private static void DrawFlagPopup()
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+        ImGui.SetNextWindowSize(new Vector2(360f * gs, 0f));
+
+        using (ImRaii.PushColor(ImGuiCol.PopupBg, new Vector4(0.11f, 0.11f, 0.18f, 1f)))
+        {
+            if (!ImGui.BeginPopup("##venueflagpopup")) return;
+        }
+
+        using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(1f, 0.45f, 0.45f, 1f)))
+            ImGui.TextUnformatted("\u2691  Report Venue");
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.65f, 0.65f, 0.72f, 1f)))
+            ImGui.TextUnformatted("Category");
+        ImGui.Spacing();
+        ImGui.RadioButton("Venue is empty##flagcat",          ref _flagCategory, 0);
+        ImGui.RadioButton("Incorrect information##flagcat",   ref _flagCategory, 1);
+        ImGui.RadioButton("Inappropriate content##flagcat",   ref _flagCategory, 2);
+
+        ImGui.Spacing();
+        using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.65f, 0.65f, 0.72f, 1f)))
+            ImGui.TextUnformatted("Additional details (optional)");
+        ImGui.SetNextItemWidth(-1f);
+        using (ImRaii.PushColor(ImGuiCol.FrameBg, new Vector4(0.14f, 0.14f, 0.22f, 1f)))
+            ImGui.InputTextMultiline("##flagdesc", ref _flagDesc, 512,
+                new Vector2(-1f, 56f * gs));
+
+        ImGui.Spacing();
+
+        if (_flagStatus == "ok")
+        {
+            using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.20f, 0.86f, 0.42f, 1f)))
+                ImGui.TextUnformatted("Report submitted — thank you!");
+            ImGui.Spacing();
+            if (ImGui.Button("  Close  ##flagclose")) ImGui.CloseCurrentPopup();
+        }
+        else if (_flagStatus == "err")
+        {
+            using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(1f, 0.45f, 0.45f, 1f)))
+                ImGui.TextUnformatted("Something went wrong, please try again.");
+            ImGui.Spacing();
+            if (ImGui.Button("  Retry  ##flagretry"))  { _flagStatus = string.Empty; _flagBusy = false; }
+            ImGui.SameLine(0, 8);
+            if (ImGui.Button("  Cancel  ##flagcancel")) ImGui.CloseCurrentPopup();
+        }
+        else if (_flagBusy)
+        {
+            using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.50f, 0.50f, 0.60f, 1f)))
+                ImGui.TextUnformatted("Submitting...");
+        }
+        else
+        {
+            if (ImGui.Button("  Submit  ##flagsubmit") && FlagService != null)
+            {
+                _flagBusy = true;
+                var id   = _flagVenueId;
+                var cat  = _flagCategory switch
+                {
+                    0 => "VenueEmpty",
+                    1 => "IncorrectInformation",
+                    _ => "InappropriateContent",
+                };
+                var desc = _flagDesc;
+                System.Threading.Tasks.Task.Run(async () =>
+                {
+                    var ok    = await FlagService.FlagVenueAsync(id, cat, desc);
+                    _flagStatus = ok ? "ok" : "err";
+                    _flagBusy   = false;
+                });
+            }
+            ImGui.SameLine(0, 8);
+            if (ImGui.Button("  Cancel  ##flagcancel")) ImGui.CloseCurrentPopup();
+        }
+
+        ImGui.Spacing();
+        ImGui.EndPopup();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

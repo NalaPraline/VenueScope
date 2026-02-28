@@ -45,7 +45,8 @@ public sealed class Plugin : IDalamudPlugin
         _cacheService        = new EventCacheService(_partakeService, _ffxivenueService, Configuration, Log);
         _notificationService = new NotificationService(_cacheService, Configuration, NotificationManager, Log);
         _teamIconCache       = new TeamIconCache(TextureProvider, Log);
-        EventRenderer.IconCache = _teamIconCache;
+        EventRenderer.IconCache    = _teamIconCache;
+        EventRenderer.FlagService  = _ffxivenueService;
 
         // UI
         ConfigWindow = new ConfigWindow(Configuration, _partakeService, _cacheService);
