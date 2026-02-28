@@ -213,15 +213,13 @@ public class FFXIVenueService : IDisposable
         var apt      = loc["apartment"]?.Value<int>();
         var room     = loc["room"]?.Value<int>();
         var district = loc["district"]?.ToString();
-        var sub      = loc["subdivision"]?.Value<bool>() ?? false;
-
         // Structured location: need at least a ward
         if (ward is > 0)
         {
             var parts = new List<string> { world };
             if (!string.IsNullOrEmpty(district)) parts.Add(district);
             parts.Add($"W{ward}");
-            if (sub) parts.Add("Sub");
+            // "Sub" is intentionally omitted — Lifestream does not handle it
             if (plot is > 0)       parts.Add($"P{plot}");
             else if (apt is > 0)   parts.Add($"Apt{apt}");
             if (room is > 0)       parts.Add($"R{room}");
