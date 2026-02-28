@@ -666,6 +666,7 @@ public sealed class MainWindow : Window, IDisposable
         return events.Where(e =>
             e.Title.Contains(q, StringComparison.OrdinalIgnoreCase)          ||
             e.Host.Contains(q, StringComparison.OrdinalIgnoreCase)           ||
+            e.TeamName.Contains(q, StringComparison.OrdinalIgnoreCase)       ||
             e.InGameLocation.Contains(q, StringComparison.OrdinalIgnoreCase) ||
             e.Tags.Any(t => t.Contains(q, StringComparison.OrdinalIgnoreCase))
         ).ToList();
