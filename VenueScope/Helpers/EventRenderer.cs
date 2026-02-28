@@ -380,7 +380,7 @@ public static class EventRenderer
             using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.55f, 0.18f, 0.18f, 0.90f));
             using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.70f, 0.22f, 0.22f, 1.00f));
             using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(1.00f, 0.40f, 0.40f, 1.00f));
-            if (ImGui.SmallButton($" \u2691 ##{ev.Id}flag"))
+            if (ImGui.SmallButton($" ! ##{ev.Id}flag"))
             {
                 _flagVenueId  = ev.Id.StartsWith("ffxivenue-") ? ev.Id[10..] : ev.Id;
                 _flagCategory = 0;
@@ -406,7 +406,7 @@ public static class EventRenderer
         }
 
         using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(1f, 0.45f, 0.45f, 1f)))
-            ImGui.TextUnformatted("\u2691  Report Venue");
+            ImGui.TextUnformatted("Report Venue");
         ImGui.Separator();
         ImGui.Spacing();
 
