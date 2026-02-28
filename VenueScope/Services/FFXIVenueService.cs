@@ -155,7 +155,12 @@ public class FFXIVenueService : IDisposable
             {
                 if (!(ov["open"]?.Value<bool>() ?? false)) continue;
                 if (!DateTimeOffset.TryParse(ov["start"]?.ToString(), out var s)) continue;
-                if (s < DateTimeOffset.UtcNow) continue; // already passed
+
+                // Skip only if the event has already ended
+                var ovEndStr = ov["end"]?.ToString();
+                if (DateTimeOffset.TryParse(ovEndStr, out var ovEnd) && ovEnd < DateTimeOffset.UtcNow) continue;
+                // No end time and start is in the past — unknown duration, skip
+                if (string.IsNullOrEmpty(ovEndStr) && s < DateTimeOffset.UtcNow) continue;
 
                 if (s < start)
                 {
