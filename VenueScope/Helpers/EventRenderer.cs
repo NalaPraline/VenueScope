@@ -370,12 +370,12 @@ public static class EventRenderer
                 Plugin.CommandManager.ProcessCommand($"/li {ev.LifestreamCode}");
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip($"/li {ev.LifestreamCode}");
-            ImGui.SameLine(0, 4);
         }
 
         // ── Flag button (FFXIVenue only) ──────────────────────────────────────
         if (ev.Source == EventSource.FFXIVenue)
         {
+            ImGui.SameLine(0, 4);
             using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.35f, 0.12f, 0.12f, 0.65f));
             using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.55f, 0.18f, 0.18f, 0.90f));
             using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.70f, 0.22f, 0.22f, 1.00f));
