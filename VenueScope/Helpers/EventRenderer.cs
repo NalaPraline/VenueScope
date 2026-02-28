@@ -1,6 +1,7 @@
 using System;
 using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.ImGuiNotification;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Utility;
@@ -362,14 +363,29 @@ public static class EventRenderer
 
         if (!string.IsNullOrEmpty(ev.LifestreamCode))
         {
-            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.18f, 0.36f, 0.22f, 0.65f));
-            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.24f, 0.52f, 0.30f, 0.90f));
-            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.30f, 0.64f, 0.38f, 1.00f));
-            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.62f, 1.00f, 0.70f, 1.00f));
+            bool lsAvail = Plugin.IsLifestreamAvailable();
+            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        lsAvail ? new Vector4(0.18f, 0.36f, 0.22f, 0.65f) : new Vector4(0.28f, 0.20f, 0.20f, 0.65f));
+            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, lsAvail ? new Vector4(0.24f, 0.52f, 0.30f, 0.90f) : new Vector4(0.40f, 0.26f, 0.26f, 0.90f));
+            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  lsAvail ? new Vector4(0.30f, 0.64f, 0.38f, 1.00f) : new Vector4(0.50f, 0.32f, 0.32f, 1.00f));
+            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          lsAvail ? new Vector4(0.62f, 1.00f, 0.70f, 1.00f) : new Vector4(0.80f, 0.50f, 0.50f, 1.00f));
             if (ImGui.SmallButton($" Teleport ##{ev.Id}"))
-                Plugin.CommandManager.ProcessCommand($"/li {ev.LifestreamCode}");
+            {
+                if (lsAvail)
+                {
+                    Plugin.CommandManager.ProcessCommand($"/li {ev.LifestreamCode}");
+                }
+                else
+                {
+                    Plugin.NotificationManager.AddNotification(new Notification
+                    {
+                        Title   = "Lifestream not installed",
+                        Content = "The Lifestream plugin is required for in-game teleport. Please install it via the Dalamud plugin installer.",
+                        Type    = NotificationType.Warning,
+                    });
+                }
+            }
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip($"/li {ev.LifestreamCode}");
+                ImGui.SetTooltip(lsAvail ? $"/li {ev.LifestreamCode}" : "Lifestream is not installed — click for details");
         }
 
         // ── Flag button (FFXIVenue only) ──────────────────────────────────────

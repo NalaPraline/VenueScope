@@ -22,6 +22,7 @@ public sealed class ConfigWindow : Window, IDisposable
     private static readonly Vector4 ColAccent   = new(0.40f, 0.65f, 1.00f, 1f);
     private static readonly Vector4 ColSubtitle = new(0.55f, 0.55f, 0.65f, 1f);
     private static readonly Vector4 ColGreen    = new(0.22f, 0.80f, 0.44f, 1f);
+    private static readonly Vector4 ColRed      = new(0.90f, 0.30f, 0.30f, 1f);
     private static readonly Vector4 ColOrange   = new(1.00f, 0.68f, 0.14f, 1f);
 
     public ConfigWindow(Configuration config, PartakeService partake, EventCacheService cache)
@@ -47,6 +48,8 @@ public sealed class ConfigWindow : Window, IDisposable
         DrawSectionNotifications();
         ImGui.Spacing();
         DrawSectionDisplay();
+        ImGui.Spacing();
+        DrawSectionIntegrations();
         ImGui.Spacing();
         DrawSectionAbout();
     }
@@ -216,6 +219,30 @@ public sealed class ConfigWindow : Window, IDisposable
         if (DrawRadio("Partake##defsrc",   _config.DefaultSourceFilter,  0)) { _config.DefaultSourceFilter =  0; _config.Save(); }
         ImGui.SameLine(0, 12);
         if (DrawRadio("FFXIV Venues##defsrc", _config.DefaultSourceFilter,  1)) { _config.DefaultSourceFilter =  1; _config.Save(); }
+
+        ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
+    }
+
+    // ══ Integrations ═══════════════════════════════════════════════════════
+
+    private static void DrawSectionIntegrations()
+    {
+        if (!SectionHeader("  Integrations")) return;
+        ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
+
+        bool lifestreamAvail = Plugin.IsLifestreamAvailable();
+        var  statusColor     = lifestreamAvail ? ColGreen : ColRed;
+        var  statusLabel     = lifestreamAvail
+            ? "Lifestream — installed"
+            : "Lifestream — not installed";
+        var  statusHint = lifestreamAvail
+            ? "Teleport buttons will use Lifestream to travel directly to venue locations."
+            : "Install Lifestream from the Dalamud plugin installer to enable in-game teleport buttons.";
+
+        using (ImRaii.PushColor(ImGuiCol.Text, statusColor))
+            ImGui.TextUnformatted(statusLabel);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(statusHint);
 
         ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }

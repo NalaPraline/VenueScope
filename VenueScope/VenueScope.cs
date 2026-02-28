@@ -1,3 +1,4 @@
+using System.Linq;
 using Dalamud.Game.Command;
 using Dalamud.IoC;
 using Dalamud.Plugin;
@@ -100,4 +101,8 @@ public sealed class Plugin : IDalamudPlugin
     private void OnCommand(string command, string args) => MainWindow.Toggle();
     public void ToggleMainUi()   => MainWindow.Toggle();
     public void ToggleConfigUi() => ConfigWindow.Toggle();
+
+    /// <summary>Returns true if the Lifestream plugin is installed and active.</summary>
+    internal static bool IsLifestreamAvailable() =>
+        PluginInterface.InstalledPlugins.Any(p => p.InternalName == "Lifestream" && p.IsLoaded);
 }
