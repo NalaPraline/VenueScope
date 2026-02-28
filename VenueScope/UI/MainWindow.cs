@@ -19,8 +19,10 @@ public sealed class MainWindow : Window, IDisposable
     private readonly PartakeService    _partake;
     private readonly Configuration     _config;
     private readonly Action            _openConfig;
-    private readonly EventStringCache  _stringCache = new();
-    private readonly EventFilterCache  _filterCache = new();
+    private readonly EventStringCache          _stringCache     = new();
+    private readonly EventFilterCache          _filterCache     = new();
+    private readonly Dictionary<string, float> _cardHeightCache = new();
+    private float _lastContentWidth = 0f;
 
     private string          _searchText     = string.Empty;
     private TimeFilter      _timeFilter     = TimeFilter.All;
@@ -528,16 +530,65 @@ public sealed class MainWindow : Window, IDisposable
             return;
         }
 
-        // ── Event list ────────────────────────────────────────────────────────
+        // ── Event list with virtual scrolling ────────────────────────────────────
         using var child = ImRaii.Child("##evlist", Vector2.Zero, false);
         if (!child.Success) return;
 
-        foreach (var ev in searched)
+        // Invalidate height cache on window resize (card width affects text wrapping)
+        float currentW = ImGui.GetContentRegionAvail().X;
+        if (Math.Abs(currentW - _lastContentWidth) > 1f)
         {
-            ImGui.PushID(ev.Id);
-            EventRenderer.DrawEventCard(ev, _stringCache.GetOrCompute(ev), _config);
-            ImGui.PopID();
-            ImGui.Dummy(new Vector2(0f, 5f * gs));
+            _cardHeightCache.Clear();
+            _lastContentWidth = currentW;
+        }
+
+        float scrollY  = ImGui.GetScrollY();
+        float windowH  = ImGui.GetWindowHeight();
+        float visTop   = scrollY;
+        float visBot   = scrollY + windowH;
+        float fallback = 80f * gs; // estimated height for cards not yet measured
+
+        // Build cumulative Y positions from cached heights
+        var cumY = new float[searched.Count + 1];
+        for (int i = 0; i < searched.Count; i++)
+            cumY[i + 1] = cumY[i] + _cardHeightCache.GetValueOrDefault(searched[i].Id, fallback);
+
+        float totalH = cumY[searched.Count];
+
+        // Determine the visible range
+        int first = searched.Count;
+        int last  = -1;
+        for (int i = 0; i < searched.Count; i++)
+        {
+            if (cumY[i + 1] >= visTop && first == searched.Count) first = i;
+            if (cumY[i]     <= visBot) last = i;
+        }
+
+        // Top spacer — holds scroll position for items above the viewport
+        if (first > 0)
+            ImGui.Dummy(new Vector2(0f, cumY[first]));
+
+        // Draw only the visible cards
+        if (first <= last)
+        {
+            for (int i = first; i <= last; i++)
+            {
+                var   ev     = searched[i];
+                float before = ImGui.GetCursorPosY();
+                ImGui.PushID(ev.Id);
+                EventRenderer.DrawEventCard(ev, _stringCache.GetOrCompute(ev), _config);
+                ImGui.PopID();
+                ImGui.Dummy(new Vector2(0f, 5f * gs));
+                _cardHeightCache[ev.Id] = ImGui.GetCursorPosY() - before;
+            }
+        }
+
+        // Bottom spacer — maintains total scroll height for items below the viewport
+        if (last < searched.Count - 1)
+        {
+            float remaining = totalH - (last >= 0 ? cumY[last + 1] : 0f);
+            if (remaining > 0f)
+                ImGui.Dummy(new Vector2(0f, remaining));
         }
     }
 
