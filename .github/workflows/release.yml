@@ -57,7 +57,7 @@ jobs:
           plugin_id: "122"
           internal_name: "VenueScope"
           path: "latest.zip"
-          type: "testing"
+          type: "latest"
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
