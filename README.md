@@ -29,14 +29,6 @@ Browse FFXIV community events from [Partake.gg](https://www.partake.gg/) and [FF
    ```
 3. Open `/xlplugins`, search for **VenueScope** and install
 
-## Building from Source
-
-Requires .NET 9 SDK and XIVLauncher with Dalamud installed.
-
-```bash
-dotnet build --configuration Release VenueScope.sln
-```
-
 ## License
 
 [AGPL-3.0](LICENSE.md)
