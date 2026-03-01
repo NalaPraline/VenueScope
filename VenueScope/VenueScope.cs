@@ -114,7 +114,10 @@ public sealed class Plugin : IDalamudPlugin
     private static async void Migrate()
     {
         const string puniUrl = "https://puni.sh/api/repository/nala";
-        const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
+        const BindingFlags declared = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+
+        static FieldInfo?  FindField (Type? t, string n) { while (t != null) { var f = t.GetField (n, declared); if (f != null) return f; t = t.BaseType; } return null; }
+        static MethodInfo? FindMethod(Type? t, string n) { while (t != null) { var m = t.GetMethod(n, declared); if (m != null) return m; t = t.BaseType; } return null; }
 
         try
         {
@@ -128,16 +131,16 @@ public sealed class Plugin : IDalamudPlugin
             // ── 1. Add puni.sh to ThirdRepoList ───────────────────────────────
             var configType = assembly.GetType("Dalamud.Configuration.Internal.DalamudConfiguration", true)!;
             var config     = serviceType.MakeGenericType(configType).GetMethod("Get")!.Invoke(null, null)!;
-            var repoList   = (config.GetType().GetField("ThirdRepoList", all)?.GetValue(config)
-                           ?? config.GetType().GetProperty("ThirdRepoList", all)?.GetValue(config)) as IList;
+            var repoList   = (FindField(config.GetType(), "ThirdRepoList")?.GetValue(config)
+                           ?? config.GetType().GetProperty("ThirdRepoList")?.GetValue(config)) as IList;
 
             if (repoList != null)
             {
                 var exists = false;
                 foreach (var r in repoList)
                 {
-                    var url = r.GetType().GetField("Url", all)?.GetValue(r) as string
-                           ?? r.GetType().GetProperty("Url", all)?.GetValue(r) as string;
+                    var url = FindField(r.GetType(), "Url")?.GetValue(r) as string
+                           ?? r.GetType().GetProperty("Url")?.GetValue(r) as string;
                     if (url == puniUrl) { exists = true; break; }
                 }
 
@@ -145,12 +148,12 @@ public sealed class Plugin : IDalamudPlugin
                 {
                     var repoType = assembly.GetType("Dalamud.Configuration.ThirdPartyRepoSettings", true)!;
                     var newRepo  = Activator.CreateInstance(repoType)!;
-                    repoType.GetField("Url",       all)?.SetValue(newRepo, puniUrl);
-                    repoType.GetProperty("Url",    all)?.SetValue(newRepo, puniUrl);
-                    repoType.GetField("IsEnabled",    all)?.SetValue(newRepo, true);
-                    repoType.GetProperty("IsEnabled", all)?.SetValue(newRepo, true);
+                    FindField(repoType, "Url")?.SetValue(newRepo, puniUrl);
+                    repoType.GetProperty("Url")?.SetValue(newRepo, puniUrl);
+                    FindField(repoType, "IsEnabled")?.SetValue(newRepo, true);
+                    repoType.GetProperty("IsEnabled")?.SetValue(newRepo, true);
                     repoList.Add(newRepo);
-                    config.GetType().GetMethod("Save", all)?.Invoke(config, null);
+                    FindMethod(config.GetType(), "Save")?.Invoke(config, null);
                 }
             }
 
@@ -166,16 +169,18 @@ public sealed class Plugin : IDalamudPlugin
                 var isDev = plugin.GetType().GetProperty("IsDev")?.GetMethod?.Invoke(plugin, null) as bool? ?? false;
                 if (name != "VenueScope" || isDev) continue;
 
-                var manifest       = plugin.GetType().GetField("manifest", all)?.GetValue(plugin);
-                if (manifest == null) break;
+                var manifest = FindField(plugin.GetType(), "manifest")?.GetValue(plugin);
+                if (manifest == null) { Log.Warning("[VenueScope] Migrate: manifest not found"); break; }
 
                 var installUrlProp = manifest.GetType().GetProperty("InstalledFromUrl");
-                var currentUrl     = installUrlProp?.GetMethod?.Invoke(manifest, null) as string;
+                var currentUrl     = installUrlProp?.GetValue(manifest) as string;
+                Log.Information($"[VenueScope] Migrate: InstalledFromUrl = {currentUrl}");
 
                 if (currentUrl != null && currentUrl.Contains("NalaPraline") && currentUrl.Contains("github"))
                 {
-                    installUrlProp!.SetMethod!.Invoke(manifest, [puniUrl]);
-                    plugin.GetType().GetMethod("SaveManifest", all)?.Invoke(plugin, ["Migrated to puni.sh"]);
+                    installUrlProp!.SetValue(manifest, puniUrl);
+                    FindMethod(plugin.GetType(), "SaveManifest")?.Invoke(plugin, ["Migrated to puni.sh"]);
+                    Log.Information("[VenueScope] Migrate: done");
                 }
                 break;
             }
