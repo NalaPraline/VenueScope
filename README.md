@@ -9,7 +9,7 @@ Browse FFXIV community events from [Partake.gg](https://www.partake.gg/) and [FF
 - Filter by source: Partake · FFXIV Venue
 - Filter by tags and search by title, location, or tag
 - Click event titles to open them in your browser
-- Copy Lifestream teleport codes with one click
+- One-click in-game teleport to venue locations via [Lifestream](https://github.com/NightmareXIV/Lifestream)
 - Toast notifications for new events on your data center
 - Auto-refresh on a configurable interval (default: 5 min)
 
@@ -21,6 +21,17 @@ Browse FFXIV community events from [Partake.gg](https://www.partake.gg/) and [FF
 | `/vs` | Alias for `/venuescope` |
 
 ## Installation
+
+### Via puni.sh (recommended)
+
+1. Open `/xlsettings` → **Experimental** tab → **Custom Plugin Repositories**
+2. Add the following URL and save:
+   ```
+   https://puni.sh/api/repository/nala
+   ```
+3. Open `/xlplugins`, search for **VenueScope** and install
+
+### Via GitHub
 
 1. Open `/xlsettings` → **Experimental** tab → **Custom Plugin Repositories**
 2. Add the following URL and save:
