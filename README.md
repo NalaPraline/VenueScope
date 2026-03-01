@@ -2,6 +2,8 @@
 
 Browse FFXIV community events from [Partake.gg](https://www.partake.gg/) and [FFXIV Venues](https://ffxivvenues.com/) directly in-game.
 
+![VenueScope](https://s.nalapraline.com/ShareX/2026/03/vsscreen.png)
+
 ## Features
 
 - Browse upcoming and live events filtered by data center
