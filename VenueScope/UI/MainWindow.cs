@@ -32,7 +32,6 @@ public sealed class MainWindow : Window, IDisposable
     private int      _shuffleSeed     = Environment.TickCount;
     private DateTime _lastSeenRefresh = DateTime.MinValue;
     private bool     _favoritesOnly   = false;
-    private bool     _venuesFavOnly   = false;
 
     private enum TimeFilter { All = 0, LiveNow = 1, Today = 2, Upcoming = 3 }
 
@@ -295,10 +294,7 @@ public sealed class MainWindow : Window, IDisposable
 
         // ── FAVORITES ─────────────────────────────────────────────────────────
         DrawSidebarLabel("FAVORITES");
-        if (DrawSidebarToggleItem("\u2605 Events", ref _favoritesOnly, new Vector4(1.00f, 0.82f, 0.14f, 1f)) && _favoritesOnly)
-            _venuesFavOnly = false;
-        if (DrawSidebarToggleItem("\u2665 Venues", ref _venuesFavOnly, new Vector4(1.00f, 0.40f, 0.70f, 1f)) && _venuesFavOnly)
-            _favoritesOnly = false;
+        DrawSidebarToggleItem("\u2605 Favorites", ref _favoritesOnly, new Vector4(1.00f, 0.82f, 0.14f, 1f));
 
         ImGui.Spacing();
         DrawSidebarRule();
@@ -351,7 +347,7 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
     }
 
-    private bool DrawSidebarToggleItem(string label, ref bool value, Vector4 color)
+    private void DrawSidebarToggleItem(string label, ref bool value, Vector4 color)
     {
         bool  active = value;
         float gs     = ImGuiHelpers.GlobalScale;
@@ -361,7 +357,6 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding,   4f * gs);
         ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
 
-        bool clicked = false;
         using (ImRaii.PushColor(ImGuiCol.Button,        active ? color with { W = 0.22f } : new Vector4(0.11f, 0.11f, 0.17f, 0.70f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonHovered, color with { W = active ? 0.30f : 0.13f }))
         using (ImRaii.PushColor(ImGuiCol.ButtonActive,  color with { W = 0.40f }))
@@ -370,15 +365,13 @@ public sealed class MainWindow : Window, IDisposable
         {
             if (ImGui.Button($"{label}##toggle{label}", new Vector2(w, 26f * gs)))
             {
-                value   = !value;
-                clicked = true;
+                value = !value;
                 _filterCache.Clear();
             }
         }
 
         ImGui.PopStyleVar(2);
         ImGui.Spacing();
-        return clicked;
     }
 
     private void DrawSidebarSourceItem(string label, EventSource? source, Vector4 color)
@@ -606,12 +599,11 @@ public sealed class MainWindow : Window, IDisposable
         string dcPart  = _selectedDcKeys.Count == 0
             ? "_global_all"
             : string.Join(",", _selectedDcKeys.OrderBy(x => x));
-        string srcPart = (_sourceFilter != null && !_favoritesOnly && !_venuesFavOnly)
+        string srcPart = (_sourceFilter != null && !_favoritesOnly)
             ? _sourceFilter.ToString()!
             : "all";
-        string favPart = _favoritesOnly  ? $"|fav{ComputeFavHash()}"      : string.Empty;
-        string vfavPart= _venuesFavOnly  ? $"|vfav{ComputeVenueFavHash()}" : string.Empty;
-        return $"{dcPart}|{srcPart}{favPart}{vfavPart}";
+        string favPart = _favoritesOnly ? $"|fav{ComputeFavHash()}" : string.Empty;
+        return $"{dcPart}|{srcPart}{favPart}";
     }
 
     private int ComputeFavHash()
@@ -620,17 +612,6 @@ public sealed class MainWindow : Window, IDisposable
         {
             int h = 17;
             foreach (var id in _config.FavoriteEventIds.OrderBy(x => x))
-                h = h * 31 + id.GetHashCode();
-            return h;
-        }
-    }
-
-    private int ComputeVenueFavHash()
-    {
-        unchecked
-        {
-            int h = 17;
-            foreach (var id in _config.FavoriteVenueIds.OrderBy(x => x))
                 h = h * 31 + id.GetHashCode();
             return h;
         }
@@ -667,9 +648,6 @@ public sealed class MainWindow : Window, IDisposable
         if (_favoritesOnly)
             events = events.Where(e => _config.FavoriteEventIds.Contains(e.Id));
 
-        if (_venuesFavOnly)
-            events = events.Where(e => e.Source == EventSource.FFXIVenue
-                                    && _config.FavoriteVenueIds.Contains(e.Id.StartsWith("ffxivenue-") ? e.Id[10..] : e.Id));
 
         // Reroll shuffle seed each time the cache is refreshed
         if (_cache.LastRefresh != _lastSeenRefresh)

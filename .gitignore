@@ -1,4 +1,8 @@
 .vs/
+.idea/
 obj/
 bin/
 *.user
+SamplePlugin/
+SamplePlugin.sln
+GUIDE_PUBLIER_PLUGIN_DALAMUD.txt

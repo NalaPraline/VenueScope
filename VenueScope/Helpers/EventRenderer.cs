@@ -385,7 +385,7 @@ public static class EventRenderer
         float w   = 32f * gs + spc; // star button always present
         if (!string.IsNullOrEmpty(ev.EventUrl))       w += 52f * gs + spc;
         if (!string.IsNullOrEmpty(ev.LifestreamCode)) w += 90f * gs + spc;
-        if (ev.Source == EventSource.FFXIVenue)       w += (32f * gs + spc) * 2; // venue heart + flag button
+        if (ev.Source == EventSource.FFXIVenue)       w += 32f * gs + spc; // flag button
         return w;
     }
 
@@ -451,28 +451,6 @@ public static class EventRenderer
             }
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip(lsAvail ? $"/li {ev.LifestreamCode}" : "Lifestream is not installed — click for details");
-        }
-
-        // ── Venue favorite (FFXIVenue only) ──────────────────────────────────
-        if (ev.Source == EventSource.FFXIVenue)
-        {
-            ImGui.SameLine(0, 4);
-            string venueId    = ev.Id.StartsWith("ffxivenue-") ? ev.Id[10..] : ev.Id;
-            bool   isVenueFav = config.FavoriteVenueIds.Contains(venueId);
-            using (ImRaii.PushColor(ImGuiCol.Button,        isVenueFav ? new Vector4(0.28f, 0.06f, 0.18f, 0.70f) : new Vector4(0.14f, 0.14f, 0.20f, 0.60f)))
-            using (ImRaii.PushColor(ImGuiCol.ButtonHovered, isVenueFav ? new Vector4(0.42f, 0.10f, 0.26f, 0.90f) : new Vector4(0.22f, 0.22f, 0.30f, 0.90f)))
-            using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.55f, 0.14f, 0.32f, 1.00f)))
-            using (ImRaii.PushColor(ImGuiCol.Text,          isVenueFav ? new Vector4(1.00f, 0.40f, 0.70f, 1f) : ColFavOff))
-            {
-                if (ImGui.SmallButton($" {(isVenueFav ? "\u2665" : "\u2661")} ##{ev.Id}vfav"))
-                {
-                    if (isVenueFav) config.FavoriteVenueIds.Remove(venueId);
-                    else            config.FavoriteVenueIds.Add(venueId);
-                    config.Save();
-                }
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(isVenueFav ? "Remove venue from favorites" : "Add venue to favorites");
         }
 
         // ── Flag button (FFXIVenue only) ──────────────────────────────────────
