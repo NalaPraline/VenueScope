@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.ImGuiNotification;
@@ -255,8 +256,8 @@ public static class EventRenderer
             }
         }
 
-        // Host
-        if (!string.IsNullOrEmpty(ev.Host))
+        // Host (Partake only — FFXIVenue managers are Discord snowflake IDs)
+        if (ev.Source == EventSource.Partake && !string.IsNullOrEmpty(ev.Host))
         {
             Dot();
             using (ImRaii.PushColor(ImGuiCol.Text, ColMuted))
@@ -304,8 +305,21 @@ public static class EventRenderer
         if (ImGui.CollapsingHeader($"Description##{ev.Id}"))
         {
             using var c4 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.78f, 0.78f, 0.82f, 1f));
-            ImGui.TextWrapped(ev.Description);
+            ImGui.TextWrapped(StripMarkdown(ev.Description));
         }
+    }
+
+    private static string StripMarkdown(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        text = Regex.Replace(text, @"\[([^\]]*)\]\([^)]*\)", "$1");              // [text](url) → text
+        text = Regex.Replace(text, @"\*{1,2}([^*\n]+)\*{1,2}", "$1");           // **bold** / *italic*
+        text = Regex.Replace(text, @"_{1,2}([^_\n]+)_{1,2}", "$1");             // __bold__ / _italic_
+        text = Regex.Replace(text, @"~~([^~\n]+)~~", "$1");                      // ~~strike~~
+        text = Regex.Replace(text, @"`([^`\n]+)`", "$1");                        // `code`
+        text = Regex.Replace(text, @"^#{1,6}\s*", "", RegexOptions.Multiline);   // # headings
+        text = Regex.Replace(text, @"^>\s*", "", RegexOptions.Multiline);        // > blockquotes
+        return text.Trim();
     }
 
     // ── Actions ───────────────────────────────────────────────────────────────
