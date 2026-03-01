@@ -22,21 +22,10 @@ Browse FFXIV community events from [Partake.gg](https://www.partake.gg/) and [FF
 
 ## Installation
 
-### Via puni.sh (recommended)
-
 1. Open `/xlsettings` → **Experimental** tab → **Custom Plugin Repositories**
 2. Add the following URL and save:
    ```
    https://puni.sh/api/repository/nala
-   ```
-3. Open `/xlplugins`, search for **VenueScope** and install
-
-### Via GitHub
-
-1. Open `/xlsettings` → **Experimental** tab → **Custom Plugin Repositories**
-2. Add the following URL and save:
-   ```
-   https://NalaPraline.github.io/VenueScope/pluginmaster.json
    ```
 3. Open `/xlplugins`, search for **VenueScope** and install
 
