@@ -14,7 +14,7 @@ public class NotificationService : IDisposable
     private readonly Configuration        _config;
     private readonly INotificationManager _notifications;
     private readonly IPluginLog           _log;
-
+    
     public NotificationService(EventCacheService cache, Configuration config,
                                 INotificationManager notifications, IPluginLog log)
     {

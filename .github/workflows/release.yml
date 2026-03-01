@@ -51,6 +51,14 @@ jobs:
           git diff --cached --quiet || git commit -m "chore: bump pluginmaster.json to ${{ github.ref_name }}"
           git push origin main
 
+      - name: Publish to puni.sh
+        run: |
+          $response = Invoke-WebRequest -Uri "https://puni.sh/api/plugin" `
+            -Method Post `
+            -Headers @{ "Authorization" = "Bearer ${{ secrets.PUNI_KEY }}" } `
+            -Form @{ file = Get-Item "latest.zip" }
+          Write-Host "puni.sh response: $($response.StatusCode)"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
