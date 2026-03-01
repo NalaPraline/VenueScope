@@ -336,8 +336,11 @@ public static class EventRenderer
                 continue;
             }
 
-            // Implicit section header: short line with no trailing sentence punctuation
-            bool isSection = line.Length <= 35
+            // Implicit section header: short, few words, no sentence-ending punctuation, no special chars
+            var words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            bool isSection = line.Length <= 25
+                          && words.Length <= 3
+                          && !line.Contains("<<")
                           && !line.EndsWith('.') && !line.EndsWith('!')
                           && !line.EndsWith('?') && !line.EndsWith(',')
                           && !line.EndsWith(';');
