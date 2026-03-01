@@ -38,6 +38,7 @@ public class Configuration : IPluginConfiguration
 
     // ── Favorites ──────────────────────────────────────────────────────────
     public HashSet<string> FavoriteEventIds { get; set; } = new();
+    public HashSet<string> FavoriteVenueIds { get; set; } = new();
 
     // ── Legacy (kept for compat, not exposed in UI) ────────────────────────
     public List<string> FavoriteDataCenters { get; set; } = new();
