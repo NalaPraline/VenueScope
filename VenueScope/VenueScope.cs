@@ -136,13 +136,17 @@ public sealed class Plugin : IDalamudPlugin
 
             if (repoList != null)
             {
-                var exists = false;
+                var exists  = false;
+                object? old = null;
                 foreach (var r in repoList)
                 {
                     var url = FindField(r.GetType(), "Url")?.GetValue(r) as string
                            ?? r.GetType().GetProperty("Url")?.GetValue(r) as string;
-                    if (url == puniUrl) { exists = true; break; }
+                    if (url == puniUrl) exists = true;
+                    if (url != null && url.Contains("NalaPraline") && url.Contains("github")) old = r;
                 }
+
+                if (old != null) repoList.Remove(old);
 
                 if (!exists)
                 {
@@ -153,8 +157,10 @@ public sealed class Plugin : IDalamudPlugin
                     FindField(repoType, "IsEnabled")?.SetValue(newRepo, true);
                     repoType.GetProperty("IsEnabled")?.SetValue(newRepo, true);
                     repoList.Add(newRepo);
-                    FindMethod(config.GetType(), "Save")?.Invoke(config, null);
                 }
+
+                if (old != null || !exists)
+                    FindMethod(config.GetType(), "Save")?.Invoke(config, null);
             }
 
             // ── 2. Update InstalledFromUrl for VenueScope ─────────────────────
