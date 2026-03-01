@@ -57,8 +57,8 @@ jobs:
           plugin_id: "122"
           internal_name: "VenueScope"
           path: "latest.zip"
-          type: "testing"
-          changelog: "Added venue favorites — heart button on FFXIV Venues events to save venues. New Venues filter in sidebar to view favorited venues."
+          type: "latest"
+          changelog: "Descriptions now display section headers in a distinct color for easier reading. Markdown characters are stripped for cleaner text. Discord IDs no longer shown in the host field."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
@@ -67,4 +67,4 @@ jobs:
         with:
           files: latest.zip
           generate_release_notes: true
-          prerelease: true
+          prerelease: false

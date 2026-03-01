@@ -1,0 +1,373 @@
+================================================================
+   INSTRUCTIONS FOR CLAUDE CODE - PUBLISH DALAMUD PLUGIN TO GITHUB
+================================================================
+
+These are standing instructions to follow every time a Dalamud
+plugin is published or updated on GitHub.
+
+================================================================
+IMPORTANT RULES - ALWAYS FOLLOW THESE
+================================================================
+
+- NEVER include the .claude/ folder in any git commit
+- NEVER include bin/ or obj/ folders in any git commit
+- NEVER add "Co-Authored-By: Claude" in commit messages
+- NEVER mention Claude, AI, or any AI tool in commit messages,
+  README files, code comments, or any file pushed to GitHub
+- Do NOT create a .gitignore automatically - only create one
+  if the user explicitly asks for it
+- Do NOT add any file that reveals the plugin was built with
+  an AI assistant
+- Commit messages should look natural, written by a developer
+
+When staging files for git, always add them explicitly by name
+instead of using "git add ." to avoid accidentally including
+.claude/, bin/, obj/ or other unwanted folders.
+
+Files to ALWAYS exclude from commits:
+  - .claude/
+  - bin/
+  - obj/
+  - .vs/
+  - *.user
+  - Any file containing API keys or secrets
+
+================================================================
+STEP 1 - PREPARE PLUGIN FILES
+================================================================
+
+1. Make sure SamplePlugin.json (inside the plugin folder)
+   has the correct info:
+   - Author : your name
+   - Name : plugin display name
+   - Punchline : short one-line description
+   - Description : full description with commands listed
+   - ApplicableVersion : "any"
+   - Tags : relevant keywords
+
+2. Make sure the .csproj has the correct version:
+   <Version>1.0.0.0</Version>
+
+3. Create a "docs" folder at the project root containing
+   pluginmaster.json (see template below).
+
+4. Create the GitHub Actions workflow at:
+   .github/workflows/release.yml (see template below)
+
+================================================================
+STEP 2 - pluginmaster.json TEMPLATE
+================================================================
+
+File location: docs/pluginmaster.json
+
+[
+  {
+    "Author": "YOUR_NAME",
+    "Name": "PLUGIN_DISPLAY_NAME",
+    "InternalName": "ASSEMBLY_NAME",
+    "AssemblyVersion": "1.0.0.0",
+    "Punchline": "Short description",
+    "Description": "Full description\n\nCommands:\n/command - description",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 14,
+    "Tags": ["tag1", "tag2"],
+    "IconUrl": "https://raw.githubusercontent.com/GITHUB_USERNAME/REPO_NAME/main/Data/icon.png",
+    "RepoUrl": "https://github.com/GITHUB_USERNAME/REPO_NAME",
+    "DownloadLinkInstall": "https://github.com/GITHUB_USERNAME/REPO_NAME/releases/latest/download/latest.zip",
+    "DownloadLinkTesting": "https://github.com/GITHUB_USERNAME/REPO_NAME/releases/latest/download/latest.zip",
+    "DownloadLinkUpdate": "https://github.com/GITHUB_USERNAME/REPO_NAME/releases/latest/download/latest.zip"
+  }
+]
+
+IMPORTANT:
+- InternalName MUST match the DLL filename exactly
+  (e.g. if the DLL is MyPlugin.dll -> InternalName: "MyPlugin")
+- AssemblyVersion must match the version in .csproj
+- DalamudApiLevel: 14 (current value for SDK 14.x)
+- Replace GITHUB_USERNAME and REPO_NAME everywhere
+
+================================================================
+STEP 3 - release.yml TEMPLATE (GitHub Actions)
+================================================================
+
+File location: .github/workflows/release.yml
+
+------------------------------------------------------------
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Download Dalamud
+        run: |
+          Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile dalamud.zip
+          Expand-Archive -Force dalamud.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
+
+      - name: Build
+        run: dotnet build --configuration Release
+
+      - name: Package plugin
+        run: |
+          $dll = Get-ChildItem -Recurse -Filter "ASSEMBLY_NAME.dll" | Where-Object { $_.FullName -like "*Release*" } | Select-Object -First 1
+          if (-not $dll) { Write-Error "DLL not found!"; exit 1 }
+          $dir = $dll.DirectoryName
+          $files = Get-ChildItem $dir | Where-Object { $_.Extension -ne ".zip" }
+          Compress-Archive -Path ($files.FullName) -DestinationPath "latest.zip" -Force
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: latest.zip
+          generate_release_notes: true
+------------------------------------------------------------
+
+IMPORTANT: Replace ASSEMBLY_NAME with the actual DLL name.
+
+================================================================
+STEP 4 - CREATE AND PUSH THE GITHUB REPO
+================================================================
+
+Open a terminal in the project folder and run:
+
+1. Check if GitHub CLI is logged in:
+   gh auth status
+
+   If not logged in:
+   gh auth login
+
+2. Create the GitHub repo (must be public):
+   gh repo create GITHUB_USERNAME/REPO_NAME --public --description "Description"
+
+3. Initialize git and add remote:
+   git init
+   git checkout -b main
+   git remote add origin https://github.com/GITHUB_USERNAME/REPO_NAME.git
+
+4. Stage files explicitly - DO NOT use "git add ." to avoid
+   including .claude/, bin/, obj/ etc.
+   Add only source files:
+   git add .editorconfig .github Data LICENSE.md README.md
+   git add PLUGIN_FOLDER_NAME.sln
+   git add PLUGIN_FOLDER_NAME/SourceFile.cs  (repeat for each .cs file)
+   git add PLUGIN_FOLDER_NAME/PLUGIN_NAME.csproj
+   git add PLUGIN_FOLDER_NAME/PLUGIN_NAME.json
+   git add PLUGIN_FOLDER_NAME/packages.lock.json
+   git add docs/
+
+5. Commit and push (NO mention of Claude or AI in the message):
+   git commit -m "Initial release"
+   git push -u origin main
+
+6. Enable GitHub Pages to host pluginmaster.json:
+   gh api repos/GITHUB_USERNAME/REPO_NAME/pages --method POST --input - <<'EOF'
+   {"source":{"branch":"main","path":"/docs"}}
+   EOF
+
+7. Create the first tag to trigger the build:
+   git tag v1.0.0.0
+   git push origin v1.0.0.0
+
+================================================================
+STEP 5 - VERIFY THE BUILD SUCCEEDED
+================================================================
+
+1. Go to: https://github.com/GITHUB_USERNAME/REPO_NAME/actions
+   - The workflow must be green (success)
+   - If red, click on it to read the error
+
+2. Check the release:
+   https://github.com/GITHUB_USERNAME/REPO_NAME/releases
+   - A latest.zip must be present
+
+3. Verify the zip contains the DLL:
+   Download the zip and confirm it contains ASSEMBLY_NAME.dll
+
+================================================================
+STEP 6 - INSTALL IN DALAMUD
+================================================================
+
+1. /xlsettings -> Experimental tab
+2. Custom Plugin Repositories -> add:
+   https://GITHUB_USERNAME.github.io/REPO_NAME/pluginmaster.json
+3. Save and Close
+4. /xlplugins -> search for the plugin -> Install
+
+If "already loaded" error appears:
+- Close the game AND XIVLauncher completely
+- Delete: %APPDATA%\XIVLauncher\installedPlugins\ASSEMBLY_NAME\
+- Also delete: %APPDATA%\XIVLauncher\pluginConfigs\ASSEMBLY_NAME.json
+  (if it exists)
+- If the error persists, delete:
+  %APPDATA%\XIVLauncher\dalamudConfig.json
+  (warning: this resets Dalamud settings, you will need to re-add
+  the custom repo URL in /xlsettings)
+- Relaunch and reinstall
+
+================================================================
+STEP 7 - PUBLISH AN UPDATE
+================================================================
+
+1. Edit the code
+2. Increment version in .csproj:
+   <Version>1.0.0.1</Version>
+3. Update AssemblyVersion in docs/pluginmaster.json
+4. Stage and commit (explicitly, no .claude/ bin/ obj/):
+   git add docs/pluginmaster.json SamplePlugin/SamplePlugin.csproj
+   git add (any other changed source files)
+   git commit -m "Short description of what changed"
+   git push
+5. Create a new tag:
+   git tag v1.0.0.1
+   git push origin v1.0.0.1
+6. GitHub Actions rebuilds automatically and updates the release
+7. Users will see the update available in /xlplugins
+
+================================================================
+USEFUL GIT COMMANDS
+================================================================
+
+Check file status:              git status
+View commits:                   git log --oneline
+Push changes:                   git add [files] && git commit -m "msg" && git push
+Create a tag:                   git tag vX.X.X.X
+Push a tag:                     git push origin vX.X.X.X
+Delete tag (local + remote):    git push origin --delete vX.X.X.X && git tag -d vX.X.X.X
+List GitHub Actions runs:       gh run list --repo GITHUB_USERNAME/REPO_NAME
+Watch a running build:          gh run watch --repo GITHUB_USERNAME/REPO_NAME
+Delete a GitHub repo:           gh repo delete GITHUB_USERNAME/REPO_NAME --yes
+  (requires delete_repo scope:  gh auth refresh -h github.com -s delete_repo)
+
+================================================================
+AVAILABLE LIBRARIES FOR DALAMUD PLUGINS
+================================================================
+
+When building a plugin, feel free to suggest and use these
+external libraries to speed up development. They are all
+trusted and widely used in the Dalamud ecosystem.
+
+----------------------------------------------------------------
+INCLUDED AUTOMATICALLY WITH Dalamud.NET.Sdk
+(no PackageReference needed)
+----------------------------------------------------------------
+
+- Dalamud API
+  The core plugin framework. Provides services like:
+  IChatGui, ICommandManager, IPluginLog, IFramework,
+  INotificationManager, IClientState, IGameGui, etc.
+
+- FFXIVClientStructs
+  Direct access to the game's internal memory structures.
+  Use to read/write game objects, UI elements, player state,
+  inventory, and pretty much anything inside the game client.
+  Requires unsafe code. Example use cases:
+    - Reading the current target
+    - Accessing inventory slots
+    - Interacting with native game UI
+  GitHub: https://github.com/aers/FFXIVClientStructs
+
+- Lumina + Lumina.Excel
+  Read game data files (items, NPCs, maps, quests, etc.)
+  from the game's Excel sheets and game data files.
+  Example: look up an item name by its ID, read territory names.
+  GitHub: https://github.com/NotAdam/Lumina
+
+- ImGui.NET (via Dalamud.Bindings.ImGui)
+  The UI framework used for all plugin windows.
+  Provides all ImGui widgets: windows, buttons, inputs,
+  tables, trees, tabs, etc.
+
+----------------------------------------------------------------
+ADD VIA PackageReference IN .csproj
+----------------------------------------------------------------
+
+ECommons (utility library - highly recommended)
+  Reduces boilerplate, provides many useful helpers:
+  - EzIPC: easy inter-plugin communication
+  - Chat automation utilities
+  - Common UI patterns and shortcuts
+  - Throttle/timing helpers
+  Add to .csproj:
+    <PackageReference Include="ECommons" Version="3.*" />
+  Initialize in plugin constructor:
+    ECommonsMain.Init(PluginInterface, this);
+  Dispose in Dispose():
+    ECommonsMain.Dispose();
+  GitHub: https://github.com/NightmareXIV/ECommons
+  NuGet:  https://www.nuget.org/packages/ECommons
+
+OtterGui (advanced ImGui widgets)
+  Extra UI controls for more complex interfaces:
+  - File/folder selectors
+  - Color pickers with presets
+  - Searchable combo boxes
+  - Table utilities
+  Add via NuGet or copy source directly.
+  GitHub: https://github.com/Ottermandias/OtterGui
+
+Newtonsoft.Json (JSON parsing)
+  If you need more advanced JSON handling than System.Text.Json.
+  Add to .csproj:
+    <PackageReference Include="Newtonsoft.Json" Version="13.*" />
+
+----------------------------------------------------------------
+USEFUL DALAMUD SERVICES (inject via [PluginService])
+----------------------------------------------------------------
+
+  IClientState       - Player login state, current character info
+  IObjectTable       - All game objects in the world (players, NPCs)
+  ITargetManager     - Current target, focus target, etc.
+  ICondition         - Player conditions (in combat, crafting, etc.)
+  IGameGui           - Game UI interactions, screen position utils
+  IDataManager       - Access to Lumina game data
+  IChatGui           - Read/write chat messages
+  ICommandManager    - Register slash commands
+  IFramework         - Game loop update tick
+  IPluginLog         - Plugin logging
+  INotificationManager - Toast notifications in the corner
+  IPartyList         - Current party members
+  IDutyState         - Duty/instance state
+
+Example usage in Plugin.cs:
+  [PluginService] internal static IClientState ClientState { get; private set; } = null!;
+  [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
+
+----------------------------------------------------------------
+USEFUL RESOURCES
+----------------------------------------------------------------
+
+Official docs:       https://dalamud.dev
+Plugin samples:      https://github.com/goatcorp/SamplePlugin
+Dalamud API ref:     https://dalamud.dev/api/
+Discord server:      https://discord.gg/holdshift  (dev help)
+ClientStructs docs:  https://ffxiv.wildwolf.dev
+
+================================================================
+NOTES
+================================================================
+
+- The repo MUST be public for Dalamud to access it
+- InternalName in pluginmaster.json = exact DLL filename (no extension)
+- AssemblyVersion in pluginmaster.json = version in .csproj
+- DalamudApiLevel = 14 (check if this changes with Dalamud updates)
+- Plugin icon should ideally be a square image, 512x512
+- GitHub Pages can take 1-2 min to update after a push
+- The build takes about 2-3 minutes to complete
+
+================================================================
