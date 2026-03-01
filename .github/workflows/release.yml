@@ -52,12 +52,14 @@ jobs:
           git push origin main
 
       - name: Publish to puni.sh
-        run: |
-          $response = Invoke-WebRequest -Uri "https://puni.sh/api/plugin" `
-            -Method Post `
-            -Headers @{ "Authorization" = "Bearer ${{ secrets.PUNI_KEY }}" } `
-            -Form @{ file = Get-Item "latest.zip" }
-          Write-Host "puni.sh response: $($response.StatusCode)"
+        uses: PunishXIV/dynamis-action@v2
+        with:
+          plugin_id: "122"
+          internal_name: "VenueScope"
+          path: "latest.zip"
+          type: "latest"
+        env:
+          PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
