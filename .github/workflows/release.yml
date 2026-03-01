@@ -57,7 +57,8 @@ jobs:
           plugin_id: "122"
           internal_name: "VenueScope"
           path: "latest.zip"
-          type: "latest"
+          type: "testing"
+          changelog: "Improved description formatting with section headers. Markdown stripping for cleaner text display."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
@@ -66,3 +67,4 @@ jobs:
         with:
           files: latest.zip
           generate_release_notes: true
+          prerelease: true

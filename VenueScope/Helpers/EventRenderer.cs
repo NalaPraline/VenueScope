@@ -301,12 +301,60 @@ public static class EventRenderer
         ImGui.Spacing();
         using var c1 = ImRaii.PushColor(ImGuiCol.Header,        new Vector4(0.14f, 0.14f, 0.22f, 0.00f));
         using var c2 = ImRaii.PushColor(ImGuiCol.HeaderHovered, new Vector4(0.20f, 0.20f, 0.30f, 1.00f));
-        using var c3 = ImRaii.PushColor(ImGuiCol.Text,          ColMuted);
-        if (ImGui.CollapsingHeader($"Description##{ev.Id}"))
+
+        bool open;
+        using (ImRaii.PushColor(ImGuiCol.Text, ColMuted))
+            open = ImGui.CollapsingHeader($"Description##{ev.Id}");
+
+        if (open)
+            DrawDescriptionLines(StripMarkdown(ev.Description));
+    }
+
+    private static readonly Vector4 ColDescSection = new(0.90f, 0.75f, 0.40f, 1f);
+    private static readonly Vector4 ColDescBody    = new(0.78f, 0.78f, 0.82f, 1f);
+
+    private static void DrawDescriptionLines(string text)
+    {
+        ImGui.Spacing();
+        var lines = text.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
         {
-            using var c4 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.78f, 0.78f, 0.82f, 1f));
-            ImGui.TextWrapped(StripMarkdown(ev.Description));
+            var line = lines[i].TrimEnd();
+
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                ImGui.Spacing();
+                continue;
+            }
+
+            // Explicit section header: starts with =
+            if (line.StartsWith('='))
+            {
+                if (i > 0) ImGui.Spacing();
+                using var c = ImRaii.PushColor(ImGuiCol.Text, ColDescSection);
+                ImGui.TextUnformatted(line[1..].Trim());
+                continue;
+            }
+
+            // Implicit section header: short line with no trailing sentence punctuation
+            bool isSection = line.Length <= 35
+                          && !line.EndsWith('.') && !line.EndsWith('!')
+                          && !line.EndsWith('?') && !line.EndsWith(',')
+                          && !line.EndsWith(';');
+
+            if (isSection)
+            {
+                if (i > 0) ImGui.Spacing();
+                using var c = ImRaii.PushColor(ImGuiCol.Text, ColDescSection);
+                ImGui.TextUnformatted(line);
+            }
+            else
+            {
+                using var c = ImRaii.PushColor(ImGuiCol.Text, ColDescBody);
+                ImGui.TextWrapped(line);
+            }
         }
+        ImGui.Spacing();
     }
 
     private static string StripMarkdown(string text)
