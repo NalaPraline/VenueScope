@@ -3,7 +3,7 @@
     "Author": "Nala Praline",
     "Name": "VenueScope",
     "InternalName": "VenueScope",
-    "AssemblyVersion": "1.0.5.4-testing",
+    "AssemblyVersion": "1.0.5.5",
     "Punchline": "Browse FFXIV community events in-game.",
     "Description": "Browse FFXIV community events from Partake.gg and FFXIVenue directly in-game. Filter by data center, time, and tags. Teleport directly to venue locations in one click via Lifestream.\n\nCommands:\n/venuescope or /vs — Open VenueScope",
     "ApplicableVersion": "any",
