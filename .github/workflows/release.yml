@@ -67,7 +67,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Favorites view now shows a card per venue/team, with all their upcoming events listed inside. Each card has an Unfollow button to stop following directly from the favorites view."
+          changelog: "Favorites view now shows a card per venue or team. Each card displays the venue image, all upcoming events in compact rows, a LIVE indicator when the venue is open, and an Unfollow button."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
