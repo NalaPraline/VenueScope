@@ -67,7 +67,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Favorites: tags are now clickable, venue name colored by source, time and source filters work in favorites view and reset to All when opening it."
+          changelog: "Favorites: fixed source and time filters, cards now hide when no events match the active filter, DC filter applied to cached venues."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

@@ -646,15 +646,22 @@ public sealed class MainWindow : Window, IDisposable
 
         if (cacheUpdated) _config.Save();
 
+        // Apply source filter
+        if (_sourceFilter != null)
+            groups = groups.Where(g => g.Info.Source == _sourceFilter).ToList();
+
         // Add favorites from persistent cache that have no events in the current cache
+        // Respect DC and source filters for cache-only entries
         var existingKeys = groups.Select(g => g.Key).ToHashSet();
         foreach (var (key, info) in _config.FavoriteVenueCache)
         {
             bool isStillFav = info.Source == EventSource.FFXIVenue
                 ? _config.FavoriteEventIds.Contains(info.VenueId)
                 : _config.FavoritePartakeTeamIds.Contains(info.TeamId);
-            if (isStillFav && !existingKeys.Contains(key))
-                groups.Add((Key: key, Info: info, Events: new List<VenueEvent>()));
+            if (!isStillFav || existingKeys.Contains(key)) continue;
+            if (_sourceFilter != null && info.Source != _sourceFilter) continue;
+            if (_selectedDcKeys.Count > 0 && !_selectedDcKeys.Contains(info.DataCenter)) continue;
+            groups.Add((Key: key, Info: info, Events: new List<VenueEvent>()));
         }
 
         var sortRng = new Random(_shuffleSeed);
@@ -698,7 +705,7 @@ public sealed class MainWindow : Window, IDisposable
         var   srcColor  = info.Source == EventSource.Partake ? ColPartake : ColFFXIVenue;
         var   colCardBg = new Vector4(0.13f, 0.13f, 0.20f, 1.00f);
 
-        // Apply HideEndedEvents + time filter — card always stays visible even if empty
+        // Apply HideEndedEvents + time filter
         var utcNow = DateTime.UtcNow;
         var visibleEvents = (_config.HideEndedEvents
             ? events.Where(e => e.EndTime == null || e.EndTime.Value.ToUniversalTime() > utcNow)
@@ -707,6 +714,10 @@ public sealed class MainWindow : Window, IDisposable
             .ToList();
         if (_timeFilter != TimeFilter.All)
             visibleEvents = ApplyTimeFilter(visibleEvents);
+
+        // Hide card entirely when a filter is active and produces no visible events
+        bool anyFilterActive = _timeFilter != TimeFilter.All || _selectedDcKeys.Count > 0;
+        if (anyFilterActive && visibleEvents.Count == 0) return;
 
         bool anyLive = visibleEvents.Any(e => _stringCache.GetOrCompute(e).IsLive);
 
@@ -797,7 +808,7 @@ public sealed class MainWindow : Window, IDisposable
                     _filterCache.Clear();
                     var newKey = BuildCacheKey();
                     EnsureTagsBuilt(newKey);
-                    if (_cache.TagsByDc.TryGetValue(newKey, out var tagDict) && tagDict.ContainsKey(folderTags[i]))
+                    if (_cache.TagsByDc.TryGetValue(newKey, out var tagDict))
                         tagDict[folderTags[i]] = true;
                 }
             }
