@@ -655,10 +655,13 @@ public sealed class MainWindow : Window, IDisposable
 
     private void DrawVenueFolder(string venueName, List<VenueEvent> events, EventSource source)
     {
-        float gs       = ImGuiHelpers.GlobalScale;
-        var   firstEv  = events[0];
-        var   srcColor = source == EventSource.Partake ? ColPartake : ColFFXIVenue;
+        float gs        = ImGuiHelpers.GlobalScale;
+        var   firstEv   = events[0];
+        var   srcColor  = source == EventSource.Partake ? ColPartake : ColFFXIVenue;
         var   colCardBg = new Vector4(0.13f, 0.13f, 0.20f, 1.00f);
+
+        // Is any event in this folder live right now?
+        bool anyLive = events.Any(e => _stringCache.GetOrCompute(e).IsLive);
 
         float cardW  = ImGui.GetContentRegionAvail().X;
         var   cardTL = ImGui.GetCursorScreenPos();
@@ -675,13 +678,14 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Dummy(new Vector2(0f, padY));
         ImGui.Indent(indent);
 
-        // ── Name + Unfollow ────────────────────────────────────────────────────
-        float spc       = ImGui.GetStyle().ItemSpacing.X;
-        float unfollowW = ImGui.CalcTextSize("\u2605 Unfollow").X
-                          + ImGui.GetStyle().FramePadding.X * 2f + spc;
-        float nameAvail = ImGui.GetContentRegionAvail().X - unfollowW - 8f * gs;
-        float rightEdge = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
-        float lineH     = ImGui.GetTextLineHeight();
+        // ── Name + [● LIVE] + Unfollow ────────────────────────────────────────
+        float spc        = ImGui.GetStyle().ItemSpacing.X;
+        float unfollowW  = ImGui.CalcTextSize("\u2605 Unfollow").X + ImGui.GetStyle().FramePadding.X * 2f + spc;
+        float liveBadgeW = anyLive ? (ImGui.CalcTextSize("\u25cf LIVE").X + spc * 2f) : 0f;
+        float totalRight = unfollowW + liveBadgeW;
+        float nameAvail  = ImGui.GetContentRegionAvail().X - totalRight - 8f * gs;
+        float rightEdge  = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
+        float lineH      = ImGui.GetTextLineHeight();
 
         var p0 = ImGui.GetCursorScreenPos();
         ImGui.PushClipRect(p0, p0 + new Vector2(nameAvail, lineH + 2f), true);
@@ -689,7 +693,17 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.TextUnformatted(venueName.Length > 0 ? venueName : "(unnamed)");
         ImGui.PopClipRect();
 
-        ImGui.SameLine(rightEdge - unfollowW);
+        if (anyLive)
+        {
+            ImGui.SameLine(rightEdge - totalRight);
+            using (ImRaii.PushColor(ImGuiCol.Text, ColTimeLive))
+                ImGui.TextUnformatted("\u25cf LIVE");
+            ImGui.SameLine(0, spc);
+        }
+        else
+        {
+            ImGui.SameLine(rightEdge - unfollowW);
+        }
 
         using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.28f, 0.22f, 0.04f, 0.70f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.44f, 0.32f, 0.06f, 0.90f)))
@@ -731,9 +745,10 @@ public sealed class MainWindow : Window, IDisposable
         // ── Event rows ─────────────────────────────────────────────────────────
         foreach (var ev in events.OrderBy(e => e.StartTime))
         {
-            var cached = _stringCache.GetOrCompute(ev);
+            var cached    = _stringCache.GetOrCompute(ev);
+            var timeColor = cached.IsLive ? ColTimeLive : ColSubtitle with { W = 0.85f };
 
-            using (ImRaii.PushColor(ImGuiCol.Text, ColSubtitle with { W = 0.85f }))
+            using (ImRaii.PushColor(ImGuiCol.Text, timeColor))
                 ImGui.TextUnformatted(cached.StartsAtLocal);
 
             if (!string.IsNullOrEmpty(cached.Location))
@@ -790,24 +805,51 @@ public sealed class MainWindow : Window, IDisposable
         var cardBR = new Vector2(cardTL.X + cardW, ImGui.GetCursorScreenPos().Y);
         dl.ChannelsSetCurrent(0);
 
-        dl.AddRectFilled(cardTL, cardBR, ImGui.ColorConvertFloat4ToU32(colCardBg), 6f * gs);
+        // Subtle green tint on the card when live
+        var bgColor     = anyLive ? new Vector4(0.10f, 0.16f, 0.14f, 1.00f) : colCardBg;
+        var accentColor = anyLive ? ColTimeLive : srcColor;
+        dl.AddRectFilled(cardTL, cardBR, ImGui.ColorConvertFloat4ToU32(bgColor), 6f * gs);
         dl.AddRectFilled(
             cardTL + new Vector2(0f, 4f * gs),
             new Vector2(cardTL.X + 3f * gs, cardBR.Y - 4f * gs),
-            ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.90f }), 2f);
+            ImGui.ColorConvertFloat4ToU32(accentColor with { W = 0.90f }), 2f);
 
-        // Source icon box
+        // ── Icon (team/venue image, or placeholder) ────────────────────────────
         var iTL = new Vector2(cardTL.X + padX, cardTL.Y + padY);
         var iBR = iTL + new Vector2(iconSz, iconSz);
-        dl.AddRectFilled(iTL, iBR, ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.13f }), 4f * gs);
-        dl.AddRect(      iTL, iBR, ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.30f }), 4f * gs, 0, gs);
 
-        string initial = source == EventSource.Partake ? "P" : "V";
-        var    initSz  = ImGui.CalcTextSize(initial);
-        dl.AddText(
-            iTL + new Vector2((iconSz - initSz.X) * 0.5f, (iconSz - initSz.Y) * 0.5f),
-            ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.70f }),
-            initial);
+        var iconUrl = !string.IsNullOrEmpty(firstEv.TeamIconUrl) ? firstEv.TeamIconUrl : firstEv.BannerUrl;
+        var icon    = !string.IsNullOrEmpty(iconUrl) ? EventRenderer.IconCache?.GetOrQueue(iconUrl) : null;
+
+        if (icon != null)
+        {
+            var uv0 = Vector2.Zero;
+            var uv1 = Vector2.One;
+            if (icon.Width > 0 && icon.Height > 0)
+            {
+                float imgAspect = (float)icon.Width / icon.Height;
+                if (imgAspect > 1f) // wider than tall → crop sides
+                {
+                    float crop   = 1f / imgAspect;
+                    float offset = (1f - crop) * 0.5f;
+                    uv0 = new Vector2(offset, 0f);
+                    uv1 = new Vector2(1f - offset, 1f);
+                }
+            }
+            dl.AddImageRounded(icon.Handle, iTL, iBR, uv0, uv1, 0xFFFFFFFF, 4f * gs);
+            dl.AddRect(iTL, iBR, ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.25f }), 4f * gs, 0, gs);
+        }
+        else
+        {
+            dl.AddRectFilled(iTL, iBR, ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.13f }), 4f * gs);
+            dl.AddRect(      iTL, iBR, ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.30f }), 4f * gs, 0, gs);
+            string initial = source == EventSource.Partake ? "P" : "V";
+            var    initSz  = ImGui.CalcTextSize(initial);
+            dl.AddText(
+                iTL + new Vector2((iconSz - initSz.X) * 0.5f, (iconSz - initSz.Y) * 0.5f),
+                ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.70f }),
+                initial);
+        }
 
         dl.ChannelsMerge();
     }
