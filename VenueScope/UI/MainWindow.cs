@@ -605,12 +605,8 @@ public sealed class MainWindow : Window, IDisposable
     {
         float gs = ImGuiHelpers.GlobalScale;
 
+        // Always group on unfiltered favorites so cards stay visible even when all events ended
         var favEvents = GetBaseEvents();
-        if (_config.HideEndedEvents)
-        {
-            var now = DateTime.UtcNow;
-            favEvents = favEvents.Where(e => e.EndTime == null || e.EndTime.Value.ToUniversalTime() > now).ToList();
-        }
 
         ImGui.Spacing();
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 8f * gs);
@@ -660,8 +656,15 @@ public sealed class MainWindow : Window, IDisposable
         var   srcColor  = source == EventSource.Partake ? ColPartake : ColFFXIVenue;
         var   colCardBg = new Vector4(0.13f, 0.13f, 0.20f, 1.00f);
 
-        // Is any event in this folder live right now?
-        bool anyLive = events.Any(e => _stringCache.GetOrCompute(e).IsLive);
+        // Apply HideEndedEvents here so the card still shows even when all events ended
+        var utcNow = DateTime.UtcNow;
+        var visibleEvents = (_config.HideEndedEvents
+            ? events.Where(e => e.EndTime == null || e.EndTime.Value.ToUniversalTime() > utcNow)
+            : events.AsEnumerable())
+            .OrderBy(e => e.StartTime)
+            .ToList();
+
+        bool anyLive = visibleEvents.Any(e => _stringCache.GetOrCompute(e).IsLive);
 
         float cardW  = ImGui.GetContentRegionAvail().X;
         var   cardTL = ImGui.GetCursorScreenPos();
@@ -743,57 +746,80 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         // ── Event rows ─────────────────────────────────────────────────────────
-        foreach (var ev in events.OrderBy(e => e.StartTime))
+        if (visibleEvents.Count == 0)
         {
-            var cached    = _stringCache.GetOrCompute(ev);
-            var timeColor = cached.IsLive ? ColTimeLive : ColSubtitle with { W = 0.85f };
-
-            using (ImRaii.PushColor(ImGuiCol.Text, timeColor))
-                ImGui.TextUnformatted(cached.StartsAtLocal);
-
-            if (!string.IsNullOrEmpty(cached.Location))
+            using (ImRaii.PushColor(ImGuiCol.Text, ColSubtitle with { W = 0.45f }))
+                ImGui.TextUnformatted("No upcoming events");
+        }
+        else
+        {
+            foreach (var ev in visibleEvents)
             {
-                ImGui.SameLine(0, 6);
-                using (ImRaii.PushColor(ImGuiCol.Text, ColDivider))
-                    ImGui.TextUnformatted("\u00b7");
-                ImGui.SameLine(0, 6);
-                using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.36f, 0.76f, 0.52f, 0.85f)))
-                    ImGui.TextUnformatted(cached.Location);
-            }
+                var cached    = _stringCache.GetOrCompute(ev);
+                var timeColor = cached.IsLive ? ColTimeLive : ColSubtitle with { W = 0.85f };
 
-            // Right-aligned Open / Teleport buttons
-            float evRight = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
-            float evBtnW  = 0f;
-            if (!string.IsNullOrEmpty(ev.EventUrl))       evBtnW += 52f * gs + spc;
-            if (!string.IsNullOrEmpty(ev.LifestreamCode)) evBtnW += 90f * gs + spc;
+                using (ImRaii.PushColor(ImGuiCol.Text, timeColor))
+                    ImGui.TextUnformatted(cached.StartsAtLocal);
 
-            if (evBtnW > 0f)
-            {
-                ImGui.SameLine(evRight - evBtnW);
-
-                if (!string.IsNullOrEmpty(ev.EventUrl))
+                if (!string.IsNullOrEmpty(cached.Location))
                 {
-                    using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.16f, 0.30f, 0.54f, 0.65f));
-                    using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.22f, 0.42f, 0.72f, 0.90f));
-                    using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.28f, 0.52f, 0.88f, 1.00f));
-                    using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.72f, 0.86f, 1.00f, 1.00f));
-                    if (ImGui.SmallButton($" Open ##{ev.Id}fv"))
-                        Util.OpenLink(ev.EventUrl);
-                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Open event page");
-                    if (!string.IsNullOrEmpty(ev.LifestreamCode)) ImGui.SameLine(0, 4);
+                    ImGui.SameLine(0, 6);
+                    using (ImRaii.PushColor(ImGuiCol.Text, ColDivider))
+                        ImGui.TextUnformatted("\u00b7");
+                    ImGui.SameLine(0, 6);
+                    using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.36f, 0.76f, 0.52f, 0.85f)))
+                        ImGui.TextUnformatted(cached.Location);
                 }
 
-                if (!string.IsNullOrEmpty(ev.LifestreamCode))
+                // Right-aligned Open / Teleport buttons
+                float evRight = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
+                float evBtnW  = 0f;
+                if (!string.IsNullOrEmpty(ev.EventUrl))       evBtnW += 52f * gs + spc;
+                if (!string.IsNullOrEmpty(ev.LifestreamCode)) evBtnW += 90f * gs + spc;
+
+                if (evBtnW > 0f)
                 {
-                    bool lsAvail = Plugin.IsLifestreamAvailable();
-                    using var c1 = ImRaii.PushColor(ImGuiCol.Button,        lsAvail ? new Vector4(0.18f, 0.36f, 0.22f, 0.65f) : new Vector4(0.28f, 0.20f, 0.20f, 0.65f));
-                    using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, lsAvail ? new Vector4(0.24f, 0.52f, 0.30f, 0.90f) : new Vector4(0.40f, 0.26f, 0.26f, 0.90f));
-                    using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  lsAvail ? new Vector4(0.30f, 0.64f, 0.38f, 1.00f) : new Vector4(0.50f, 0.32f, 0.32f, 1.00f));
-                    using var c4 = ImRaii.PushColor(ImGuiCol.Text,          lsAvail ? new Vector4(0.62f, 1.00f, 0.70f, 1.00f) : new Vector4(0.80f, 0.50f, 0.50f, 1.00f));
-                    if (ImGui.SmallButton($" Teleport ##{ev.Id}fvt") && lsAvail)
-                        Plugin.CommandManager.ProcessCommand($"/li {ev.LifestreamCode}");
-                    if (ImGui.IsItemHovered())
-                        ImGui.SetTooltip(lsAvail ? $"/li {ev.LifestreamCode}" : "Lifestream is not installed");
+                    ImGui.SameLine(evRight - evBtnW);
+
+                    if (!string.IsNullOrEmpty(ev.EventUrl))
+                    {
+                        using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.16f, 0.30f, 0.54f, 0.65f));
+                        using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.22f, 0.42f, 0.72f, 0.90f));
+                        using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.28f, 0.52f, 0.88f, 1.00f));
+                        using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.72f, 0.86f, 1.00f, 1.00f));
+                        if (ImGui.SmallButton($" Open ##{ev.Id}fv"))
+                            Util.OpenLink(ev.EventUrl);
+                        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Open event page");
+                        if (!string.IsNullOrEmpty(ev.LifestreamCode)) ImGui.SameLine(0, 4);
+                    }
+
+                    if (!string.IsNullOrEmpty(ev.LifestreamCode))
+                    {
+                        bool lsAvail = Plugin.IsLifestreamAvailable();
+                        using var c1 = ImRaii.PushColor(ImGuiCol.Button,        lsAvail ? new Vector4(0.18f, 0.36f, 0.22f, 0.65f) : new Vector4(0.28f, 0.20f, 0.20f, 0.65f));
+                        using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, lsAvail ? new Vector4(0.24f, 0.52f, 0.30f, 0.90f) : new Vector4(0.40f, 0.26f, 0.26f, 0.90f));
+                        using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  lsAvail ? new Vector4(0.30f, 0.64f, 0.38f, 1.00f) : new Vector4(0.50f, 0.32f, 0.32f, 1.00f));
+                        using var c4 = ImRaii.PushColor(ImGuiCol.Text,          lsAvail ? new Vector4(0.62f, 1.00f, 0.70f, 1.00f) : new Vector4(0.80f, 0.50f, 0.50f, 1.00f));
+                        if (ImGui.SmallButton($" Teleport ##{ev.Id}fvt") && lsAvail)
+                            Plugin.CommandManager.ProcessCommand($"/li {ev.LifestreamCode}");
+                        if (ImGui.IsItemHovered())
+                            ImGui.SetTooltip(lsAvail ? $"/li {ev.LifestreamCode}" : "Lifestream is not installed");
+                    }
+                }
+
+                // Tags
+                if (cached.Tags.Length > 0)
+                {
+                    for (int i = 0; i < cached.Tags.Length; i++)
+                    {
+                        if (i > 0) ImGui.SameLine(0, 4);
+                        var col = EventRenderer.GetTagColor(cached.Tags[i]);
+                        using var c1 = ImRaii.PushColor(ImGuiCol.Button,        col with { W = 0.22f });
+                        using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, col with { W = 0.38f });
+                        using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  col with { W = 0.50f });
+                        using var c4 = ImRaii.PushColor(ImGuiCol.Text,          col with { W = 0.90f });
+                        ImGui.SmallButton($" {cached.Tags[i]} ##{ev.Id}fvtag{i}");
+                    }
                 }
             }
         }
