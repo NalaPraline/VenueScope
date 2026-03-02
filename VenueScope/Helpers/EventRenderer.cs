@@ -397,7 +397,9 @@ public static class EventRenderer
         ImGui.SameLine(rightEdge - reservedW);
 
         // ── Favorite toggle ───────────────────────────────────────────────────
-        bool isFav = config.FavoriteEventIds.Contains(ev.Id);
+        bool isFav = ev.Source == EventSource.Partake
+            ? ev.TeamId > 0 && config.FavoritePartakeTeamIds.Contains(ev.TeamId)
+            : config.FavoriteEventIds.Contains(ev.Id);
         using (ImRaii.PushColor(ImGuiCol.Button,        isFav ? new Vector4(0.28f, 0.22f, 0.04f, 0.70f) : new Vector4(0.14f, 0.14f, 0.20f, 0.60f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonHovered, isFav ? new Vector4(0.40f, 0.32f, 0.06f, 0.90f) : new Vector4(0.22f, 0.22f, 0.30f, 0.90f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.50f, 0.40f, 0.08f, 1.00f)))
@@ -405,13 +407,24 @@ public static class EventRenderer
         {
             if (ImGui.SmallButton($" {(isFav ? "\u2605" : "\u2606")} ##{ev.Id}fav"))
             {
-                if (isFav) config.FavoriteEventIds.Remove(ev.Id);
-                else       config.FavoriteEventIds.Add(ev.Id);
+                if (ev.Source == EventSource.Partake && ev.TeamId > 0)
+                {
+                    if (isFav) config.FavoritePartakeTeamIds.Remove(ev.TeamId);
+                    else       config.FavoritePartakeTeamIds.Add(ev.TeamId);
+                }
+                else if (ev.Source == EventSource.FFXIVenue)
+                {
+                    if (isFav) config.FavoriteEventIds.Remove(ev.Id);
+                    else       config.FavoriteEventIds.Add(ev.Id);
+                }
                 config.Save();
             }
         }
+        string favTooltip = ev.Source == EventSource.Partake && !string.IsNullOrEmpty(ev.TeamName)
+            ? (isFav ? $"Unfollow {ev.TeamName}" : $"Follow {ev.TeamName} (all their events)")
+            : (isFav ? "Unfollow this venue" : "Follow this venue");
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(isFav ? "Remove from favorites" : "Add to favorites");
+            ImGui.SetTooltip(favTooltip);
         ImGui.SameLine(0, 4);
 
         if (!string.IsNullOrEmpty(ev.EventUrl))

@@ -51,14 +51,23 @@ jobs:
           git diff --cached --quiet || git commit -m "chore: bump pluginmaster.json to ${{ github.ref_name }}"
           git push origin main
 
+      - name: Determine release type
+        id: reltype
+        run: |
+          if ("${{ github.ref_name }}" -match "-testing$") {
+            echo "type=testing" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "type=latest" >> $env:GITHUB_OUTPUT
+          }
+
       - name: Publish to puni.sh
         uses: PunishXIV/dynamis-action@v2
         with:
           plugin_id: "122"
           internal_name: "VenueScope"
           path: "latest.zip"
-          type: "latest"
-          changelog: "Fixed an issue where venues writing their ward and plot without a space (e.g. W7P5) would cause Lifestream to fail to teleport. These codes are now automatically corrected to the proper format (W7 P5)."
+          type: ${{ steps.reltype.outputs.type }}
+          changelog: "Favorites now follow organizers/venues instead of individual events — starring a Partake event will highlight all future events from the same team."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

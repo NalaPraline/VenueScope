@@ -220,6 +220,7 @@ public class PartakeService : IDisposable
                 AttendeeCount    = ev.AttendeeCount,
                 TeamName         = ev.Team?.Name ?? string.Empty,
                 TeamIconUrl      = ev.Team?.IconUrl ?? string.Empty,
+                TeamId           = ev.Team?.Id ?? 0,
             });
         }
         return result;

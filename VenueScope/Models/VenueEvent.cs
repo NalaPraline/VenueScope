@@ -27,6 +27,7 @@ public class VenueEvent
     public string BannerUrl    { get; set; } = string.Empty;
     public string TeamIconUrl  { get; set; } = string.Empty;
     public string TeamName     { get; set; } = string.Empty;
+    public int    TeamId       { get; set; } = 0;
     public List<string> Tags { get; set; } = new();
     public string EventUrl { get; set; } = string.Empty;
     public EventSource Source { get; set; }
