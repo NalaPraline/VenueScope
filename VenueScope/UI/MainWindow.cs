@@ -613,6 +613,8 @@ public sealed class MainWindow : Window, IDisposable
             int h = 17;
             foreach (var id in _config.FavoriteEventIds.OrderBy(x => x))
                 h = h * 31 + id.GetHashCode();
+            foreach (var id in _config.FavoritePartakeTeamIds.OrderBy(x => x))
+                h = h * 31 + id;
             return h;
         }
     }
@@ -646,7 +648,10 @@ public sealed class MainWindow : Window, IDisposable
             events = events.Where(e => e.Source == _sourceFilter);
 
         if (_favoritesOnly)
-            events = events.Where(e => _config.FavoriteEventIds.Contains(e.Id));
+            events = events.Where(e =>
+                e.Source == EventSource.FFXIVenue
+                    ? _config.FavoriteEventIds.Contains(e.Id)
+                    : e.TeamId > 0 && _config.FavoritePartakeTeamIds.Contains(e.TeamId));
 
 
         // Reroll shuffle seed each time the cache is refreshed
