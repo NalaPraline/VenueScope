@@ -297,7 +297,12 @@ public sealed class MainWindow : Window, IDisposable
         DrawSidebarLabel("FAVORITES");
         bool prevFavoritesOnly = _favoritesOnly;
         DrawSidebarToggleItem("\u2605 Favorites", ref _favoritesOnly, new Vector4(1.00f, 0.82f, 0.14f, 1f));
-        if (_favoritesOnly && !prevFavoritesOnly) ClearDcSelection();
+        if (_favoritesOnly && !prevFavoritesOnly)
+        {
+            ClearDcSelection();
+            _timeFilter   = TimeFilter.All;
+            _sourceFilter = null;
+        }
 
         ImGui.Spacing();
         DrawSidebarRule();
@@ -693,13 +698,15 @@ public sealed class MainWindow : Window, IDisposable
         var   srcColor  = info.Source == EventSource.Partake ? ColPartake : ColFFXIVenue;
         var   colCardBg = new Vector4(0.13f, 0.13f, 0.20f, 1.00f);
 
-        // Apply HideEndedEvents filter for display only — card always stays visible
+        // Apply HideEndedEvents + time filter — card always stays visible even if empty
         var utcNow = DateTime.UtcNow;
         var visibleEvents = (_config.HideEndedEvents
             ? events.Where(e => e.EndTime == null || e.EndTime.Value.ToUniversalTime() > utcNow)
             : events.AsEnumerable())
             .OrderBy(e => e.StartTime)
             .ToList();
+        if (_timeFilter != TimeFilter.All)
+            visibleEvents = ApplyTimeFilter(visibleEvents);
 
         bool anyLive = visibleEvents.Any(e => _stringCache.GetOrCompute(e).IsLive);
 
@@ -732,7 +739,7 @@ public sealed class MainWindow : Window, IDisposable
 
         var p0 = ImGui.GetCursorScreenPos();
         ImGui.PushClipRect(p0, p0 + new Vector2(nameAvail, lineH + 2f), true);
-        using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.94f, 0.94f, 1.00f, 1f)))
+        using (ImRaii.PushColor(ImGuiCol.Text, srcColor with { W = 1f }))
             ImGui.TextUnformatted(info.Name.Length > 0 ? info.Name : "(unnamed)");
         ImGui.PopClipRect();
 
@@ -784,7 +791,15 @@ public sealed class MainWindow : Window, IDisposable
                 using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, col with { W = 0.38f });
                 using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  col with { W = 0.50f });
                 using var c4 = ImRaii.PushColor(ImGuiCol.Text,          col with { W = 0.90f });
-                ImGui.SmallButton($" {folderTags[i]} ##fvtag{unfollowKey}{i}");
+                if (ImGui.SmallButton($" {folderTags[i]} ##fvtag{unfollowKey}{i}"))
+                {
+                    _favoritesOnly = false;
+                    _filterCache.Clear();
+                    var newKey = BuildCacheKey();
+                    EnsureTagsBuilt(newKey);
+                    if (_cache.TagsByDc.TryGetValue(newKey, out var tagDict) && tagDict.ContainsKey(folderTags[i]))
+                        tagDict[folderTags[i]] = true;
+                }
             }
         }
 

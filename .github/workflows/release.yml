@@ -67,7 +67,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Favorites: server/DC now shown per event row, Partake event titles visible, cards sorted by urgency, report button restored, switching to Favorites resets DC filter."
+          changelog: "Favorites: tags are now clickable, venue name colored by source, time and source filters work in favorites view and reset to All when opening it."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
