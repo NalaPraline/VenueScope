@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Dalamud.Plugin.Services;
 using Newtonsoft.Json.Linq;
@@ -235,7 +236,10 @@ public class FFXIVenueService : IDisposable
         // No structured ward — fall back to free-text override with server prefix
         var ovr = loc["override"]?.ToString();
         if (!string.IsNullOrWhiteSpace(ovr))
+        {
+            ovr = Regex.Replace(ovr, @"\bW(\d+)P(\d+)\b", "W$1 P$2", RegexOptions.IgnoreCase);
             return $"{world} - {ovr}";
+        }
 
         return string.Empty;
     }

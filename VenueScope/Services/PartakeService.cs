@@ -435,6 +435,11 @@ public class PartakeService : IDisposable
     /// <summary>Removes stray / and | characters left over after normalization.</summary>
     private static string CleanLifestreamCode(string s)
     {
+        // Expand concatenated ward+plot (W7P5 → W7 P5) before other cleanup
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s, @"\bW(\d+)P(\d+)\b", "W$1 P$2",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
         // Replace separator characters with a space, then collapse runs of whitespace
         var sb = new StringBuilder(s.Length);
         bool lastWasSpace = false;
