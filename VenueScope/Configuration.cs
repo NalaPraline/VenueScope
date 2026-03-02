@@ -37,7 +37,8 @@ public class Configuration : IPluginConfiguration
     public int  DefaultSourceFilter { get; set; } = -1;
 
     // ── Favorites ──────────────────────────────────────────────────────────
-    public HashSet<string> FavoriteEventIds { get; set; } = new();
+    public HashSet<string> FavoriteEventIds      { get; set; } = new(); // FFXIVenue venue IDs
+    public HashSet<int>    FavoritePartakeTeamIds { get; set; } = new();
 
     // ── Legacy (kept for compat, not exposed in UI) ────────────────────────
     public List<string> FavoriteDataCenters { get; set; } = new();
