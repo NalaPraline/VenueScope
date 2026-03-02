@@ -67,7 +67,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Favorites: fixed source and time filters, cards now hide when no events match the active filter, DC filter applied to cached venues."
+          changelog: "Favorites: sidebar tags now filter venue cards, fixed blank gap between header and first card."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

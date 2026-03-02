@@ -690,16 +690,26 @@ public sealed class MainWindow : Window, IDisposable
         using var child = ImRaii.Child("##favlist", Vector2.Zero, false);
         if (!child.Success) return;
 
+        // Apply active sidebar tag filter
+        string favCacheKey = BuildCacheKey();
+        EnsureTagsBuilt(favCacheKey);
+        if (_cache.TagsByDc.TryGetValue(favCacheKey, out var activeTags))
+        {
+            var selectedTags = activeTags.Where(t => t.Value).Select(t => t.Key).ToHashSet();
+            if (selectedTags.Count > 0)
+                groups = groups.Where(g => g.Events.Any(e => e.Tags.Any(t => selectedTags.Contains(t)))).ToList();
+        }
+
         foreach (var (key, info, events) in groups)
         {
             ImGui.PushID(key);
-            DrawVenueFolder(info, events);
+            bool rendered = DrawVenueFolder(info, events);
             ImGui.PopID();
-            ImGui.Dummy(new Vector2(0f, 5f * gs));
+            if (rendered) ImGui.Dummy(new Vector2(0f, 5f * gs));
         }
     }
 
-    private void DrawVenueFolder(FavoriteVenueInfo info, List<VenueEvent> events)
+    private bool DrawVenueFolder(FavoriteVenueInfo info, List<VenueEvent> events)
     {
         float gs        = ImGuiHelpers.GlobalScale;
         var   srcColor  = info.Source == EventSource.Partake ? ColPartake : ColFFXIVenue;
@@ -717,7 +727,7 @@ public sealed class MainWindow : Window, IDisposable
 
         // Hide card entirely when a filter is active and produces no visible events
         bool anyFilterActive = _timeFilter != TimeFilter.All || _selectedDcKeys.Count > 0;
-        if (anyFilterActive && visibleEvents.Count == 0) return;
+        if (anyFilterActive && visibleEvents.Count == 0) return false;
 
         bool anyLive = visibleEvents.Any(e => _stringCache.GetOrCompute(e).IsLive);
 
@@ -977,6 +987,7 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         dl.ChannelsMerge();
+        return true;
     }
 
     // ══ Helpers ═══════════════════════════════════════════════════════════════
