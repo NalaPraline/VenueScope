@@ -1063,6 +1063,7 @@ public sealed class MainWindow : Window, IDisposable
         var list = events
             .Select(e => (ev: e, group: GetSortGroup(e), rnd: rng.NextDouble()))
             .OrderBy(x => x.group)
+            .ThenBy(x => x.ev.StartTime)
             .ThenBy(x => x.rnd)
             .Select(x => x.ev)
             .ToList();
@@ -1108,7 +1109,11 @@ public sealed class MainWindow : Window, IDisposable
                        (endDate.HasValue && startDate <= todayDate && endDate.Value >= todayDate);
             }).ToList(),
 
-            TimeFilter.Upcoming => events.Where(e => e.StartTime.ToUniversalTime() > utcNow).ToList(),
+            TimeFilter.Upcoming => events.Where(e =>
+            {
+                var s = e.StartTime.ToUniversalTime();
+                return s > utcNow && s <= utcNow.AddDays(14);
+            }).ToList(),
 
             _ => events,
         };

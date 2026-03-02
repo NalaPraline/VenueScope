@@ -67,7 +67,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Favorites: sidebar tags now filter venue cards, fixed blank gap between header and first card."
+          changelog: "Events now sort by date in upcoming view, upcoming tab limited to next 14 days."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
