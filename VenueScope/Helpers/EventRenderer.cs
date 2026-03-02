@@ -409,13 +409,47 @@ public static class EventRenderer
             {
                 if (ev.Source == EventSource.Partake && ev.TeamId > 0)
                 {
-                    if (isFav) config.FavoritePartakeTeamIds.Remove(ev.TeamId);
-                    else       config.FavoritePartakeTeamIds.Add(ev.TeamId);
+                    string key = $"partake:{ev.TeamId}";
+                    if (isFav)
+                    {
+                        config.FavoritePartakeTeamIds.Remove(ev.TeamId);
+                        config.FavoriteVenueCache.Remove(key);
+                    }
+                    else
+                    {
+                        config.FavoritePartakeTeamIds.Add(ev.TeamId);
+                        config.FavoriteVenueCache[key] = new FavoriteVenueInfo
+                        {
+                            TeamId     = ev.TeamId,
+                            Name       = ev.TeamName,
+                            Server     = ev.Server,
+                            DataCenter = ev.DataCenter,
+                            IconUrl    = !string.IsNullOrEmpty(ev.TeamIconUrl) ? ev.TeamIconUrl : ev.BannerUrl,
+                            Source     = EventSource.Partake,
+                        };
+                    }
                 }
                 else if (ev.Source == EventSource.FFXIVenue)
                 {
-                    if (isFav) config.FavoriteEventIds.Remove(ev.Id);
-                    else       config.FavoriteEventIds.Add(ev.Id);
+                    string key = $"ffxiv:{ev.Id}";
+                    if (isFav)
+                    {
+                        config.FavoriteEventIds.Remove(ev.Id);
+                        config.FavoriteVenueCache.Remove(key);
+                    }
+                    else
+                    {
+                        config.FavoriteEventIds.Add(ev.Id);
+                        config.FavoriteVenueCache[key] = new FavoriteVenueInfo
+                        {
+                            VenueId    = ev.Id,
+                            Name       = ev.Title,
+                            Server     = ev.Server,
+                            DataCenter = ev.DataCenter,
+                            IconUrl    = !string.IsNullOrEmpty(ev.BannerUrl) ? ev.BannerUrl : ev.TeamIconUrl,
+                            Source     = EventSource.FFXIVenue,
+                        };
+                    }
                 }
                 config.Save();
             }

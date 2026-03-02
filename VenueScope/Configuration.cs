@@ -1,8 +1,22 @@
 using Dalamud.Configuration;
 using System;
 using System.Collections.Generic;
+using VenueScope.Models;
 
 namespace VenueScope;
+
+/// <summary>Persisted display info for a followed venue or team.</summary>
+[Serializable]
+public class FavoriteVenueInfo
+{
+    public string      VenueId    { get; set; } = string.Empty; // FFXIVenue event ID
+    public int         TeamId     { get; set; } = 0;            // Partake team ID
+    public string      Name       { get; set; } = string.Empty;
+    public string      Server     { get; set; } = string.Empty;
+    public string      DataCenter { get; set; } = string.Empty;
+    public string      IconUrl    { get; set; } = string.Empty;
+    public EventSource Source     { get; set; }
+}
 
 [Serializable]
 public class Configuration : IPluginConfiguration
@@ -39,6 +53,9 @@ public class Configuration : IPluginConfiguration
     // ── Favorites ──────────────────────────────────────────────────────────
     public HashSet<string> FavoriteEventIds      { get; set; } = new(); // FFXIVenue venue IDs
     public HashSet<int>    FavoritePartakeTeamIds { get; set; } = new();
+
+    // Persistent display info for followed venues/teams (key: "ffxiv:{id}" or "partake:{teamId}")
+    public Dictionary<string, FavoriteVenueInfo> FavoriteVenueCache { get; set; } = new();
 
     // ── Legacy (kept for compat, not exposed in UI) ────────────────────────
     public List<string> FavoriteDataCenters { get; set; } = new();
