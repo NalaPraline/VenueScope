@@ -605,19 +605,10 @@ public sealed class MainWindow : Window, IDisposable
     {
         float gs = ImGuiHelpers.GlobalScale;
 
-        // Always group on unfiltered favorites so cards stay visible even when all events ended
         var favEvents = GetBaseEvents();
 
-        ImGui.Spacing();
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 8f * gs);
-
-        if (favEvents.Count == 0)
-        {
-            ImGui.TextColored(ColSubtitle, "No favorites yet. Star a venue or team to follow it here.");
-            return;
-        }
-
-        // Group FFXIVenue by event Id, Partake by TeamId
+        // Build groups from current cache events + populate venue info cache for new favorites
+        bool cacheUpdated = false;
         var groups = favEvents
             .GroupBy(e => e.Source == EventSource.FFXIVenue
                 ? $"ffxiv:{e.Id}"
@@ -625,13 +616,50 @@ public sealed class MainWindow : Window, IDisposable
             .Select(g =>
             {
                 var first = g.First();
-                string name = first.Source == EventSource.FFXIVenue
-                    ? first.Title
-                    : first.TeamName;
-                return (Name: name, Events: g.ToList(), Source: first.Source);
+                string key = g.Key;
+                var info = new FavoriteVenueInfo
+                {
+                    VenueId    = first.Source == EventSource.FFXIVenue ? first.Id : string.Empty,
+                    TeamId     = first.TeamId,
+                    Name       = first.Source == EventSource.FFXIVenue ? first.Title : first.TeamName,
+                    Server     = first.Server,
+                    DataCenter = first.DataCenter,
+                    IconUrl    = !string.IsNullOrEmpty(first.TeamIconUrl) ? first.TeamIconUrl : first.BannerUrl,
+                    Source     = first.Source,
+                };
+                // Bootstrap cache for pre-existing favorites that don't have an entry yet
+                if (!_config.FavoriteVenueCache.ContainsKey(key))
+                {
+                    _config.FavoriteVenueCache[key] = info;
+                    cacheUpdated = true;
+                }
+                return (Key: key, Info: info, Events: g.ToList());
             })
-            .OrderBy(g => g.Name)
             .ToList();
+
+        if (cacheUpdated) _config.Save();
+
+        // Add favorites from persistent cache that have no events in the current cache
+        var existingKeys = groups.Select(g => g.Key).ToHashSet();
+        foreach (var (key, info) in _config.FavoriteVenueCache)
+        {
+            bool isStillFav = info.Source == EventSource.FFXIVenue
+                ? _config.FavoriteEventIds.Contains(info.VenueId)
+                : _config.FavoritePartakeTeamIds.Contains(info.TeamId);
+            if (isStillFav && !existingKeys.Contains(key))
+                groups.Add((Key: key, Info: info, Events: new List<VenueEvent>()));
+        }
+
+        groups = groups.OrderBy(g => g.Info.Name).ToList();
+
+        ImGui.Spacing();
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 8f * gs);
+
+        if (groups.Count == 0)
+        {
+            ImGui.TextColored(ColSubtitle, "No favorites yet. Star a venue or team to follow it here.");
+            return;
+        }
 
         ImGui.TextColored(ColSubtitle,
             $"{groups.Count} followed venue{(groups.Count != 1 ? "s" : "")}");
@@ -640,23 +668,22 @@ public sealed class MainWindow : Window, IDisposable
         using var child = ImRaii.Child("##favlist", Vector2.Zero, false);
         if (!child.Success) return;
 
-        foreach (var (name, events, source) in groups)
+        foreach (var (key, info, events) in groups)
         {
-            ImGui.PushID($"{source}{events[0].Id}{events[0].TeamId}");
-            DrawVenueFolder(name, events, source);
+            ImGui.PushID(key);
+            DrawVenueFolder(info, events);
             ImGui.PopID();
             ImGui.Dummy(new Vector2(0f, 5f * gs));
         }
     }
 
-    private void DrawVenueFolder(string venueName, List<VenueEvent> events, EventSource source)
+    private void DrawVenueFolder(FavoriteVenueInfo info, List<VenueEvent> events)
     {
         float gs        = ImGuiHelpers.GlobalScale;
-        var   firstEv   = events[0];
-        var   srcColor  = source == EventSource.Partake ? ColPartake : ColFFXIVenue;
+        var   srcColor  = info.Source == EventSource.Partake ? ColPartake : ColFFXIVenue;
         var   colCardBg = new Vector4(0.13f, 0.13f, 0.20f, 1.00f);
 
-        // Apply HideEndedEvents here so the card still shows even when all events ended
+        // Apply HideEndedEvents filter for display only — card always stays visible
         var utcNow = DateTime.UtcNow;
         var visibleEvents = (_config.HideEndedEvents
             ? events.Where(e => e.EndTime == null || e.EndTime.Value.ToUniversalTime() > utcNow)
@@ -665,6 +692,9 @@ public sealed class MainWindow : Window, IDisposable
             .ToList();
 
         bool anyLive = visibleEvents.Any(e => _stringCache.GetOrCompute(e).IsLive);
+
+        // Deduplicated tags across all events for this venue
+        var folderTags = events.SelectMany(e => e.Tags).Distinct().ToList();
 
         float cardW  = ImGui.GetContentRegionAvail().X;
         var   cardTL = ImGui.GetCursorScreenPos();
@@ -693,7 +723,7 @@ public sealed class MainWindow : Window, IDisposable
         var p0 = ImGui.GetCursorScreenPos();
         ImGui.PushClipRect(p0, p0 + new Vector2(nameAvail, lineH + 2f), true);
         using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.94f, 0.94f, 1.00f, 1f)))
-            ImGui.TextUnformatted(venueName.Length > 0 ? venueName : "(unnamed)");
+            ImGui.TextUnformatted(info.Name.Length > 0 ? info.Name : "(unnamed)");
         ImGui.PopClipRect();
 
         if (anyLive)
@@ -708,32 +738,56 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.SameLine(rightEdge - unfollowW);
         }
 
+        string unfollowKey = info.Source == EventSource.FFXIVenue
+            ? $"ffxiv:{info.VenueId}" : $"partake:{info.TeamId}";
+
         using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.28f, 0.22f, 0.04f, 0.70f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.44f, 0.32f, 0.06f, 0.90f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.56f, 0.40f, 0.08f, 1.00f)))
         using (ImRaii.PushColor(ImGuiCol.Text,          new Vector4(1.00f, 0.82f, 0.14f, 1f)))
         {
-            if (ImGui.SmallButton($"\u2605 Unfollow##{firstEv.Id}unfollow"))
+            if (ImGui.SmallButton($"\u2605 Unfollow##{unfollowKey}unfollow"))
             {
-                if (source == EventSource.FFXIVenue)
-                    _config.FavoriteEventIds.Remove(firstEv.Id);
+                if (info.Source == EventSource.FFXIVenue)
+                {
+                    _config.FavoriteEventIds.Remove(info.VenueId);
+                    _config.FavoriteVenueCache.Remove($"ffxiv:{info.VenueId}");
+                }
                 else
-                    _config.FavoritePartakeTeamIds.Remove(firstEv.TeamId);
+                {
+                    _config.FavoritePartakeTeamIds.Remove(info.TeamId);
+                    _config.FavoriteVenueCache.Remove($"partake:{info.TeamId}");
+                }
                 _config.Save();
                 _filterCache.Clear();
             }
         }
 
         // ── Server · DC ────────────────────────────────────────────────────────
-        if (!string.IsNullOrEmpty(firstEv.DataCenter) || !string.IsNullOrEmpty(firstEv.Server))
+        if (!string.IsNullOrEmpty(info.DataCenter) || !string.IsNullOrEmpty(info.Server))
         {
-            var serverDc = !string.IsNullOrEmpty(firstEv.Server)
-                ? (string.IsNullOrEmpty(firstEv.DataCenter)
-                    ? firstEv.Server
-                    : $"{firstEv.Server} · {firstEv.DataCenter}")
-                : firstEv.DataCenter;
+            var serverDc = !string.IsNullOrEmpty(info.Server)
+                ? (string.IsNullOrEmpty(info.DataCenter)
+                    ? info.Server
+                    : $"{info.Server} · {info.DataCenter}")
+                : info.DataCenter;
             using (ImRaii.PushColor(ImGuiCol.Text, ColSubtitle))
                 ImGui.TextUnformatted(serverDc);
+        }
+
+        // ── Tags (deduplicated, folder level) ──────────────────────────────────
+        if (folderTags.Count > 0)
+        {
+            for (int i = 0; i < folderTags.Count; i++)
+            {
+                if (i > 0) ImGui.SameLine(0, 4);
+                var col = EventRenderer.GetTagColor(folderTags[i]);
+                using var c1 = ImRaii.PushColor(ImGuiCol.Button,        col with { W = 0.22f });
+                using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, col with { W = 0.38f });
+                using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  col with { W = 0.50f });
+                using var c4 = ImRaii.PushColor(ImGuiCol.Text,          col with { W = 0.90f });
+                ImGui.SmallButton($" {folderTags[i]} ##fvtag{unfollowKey}{i}");
+            }
         }
 
         // ── Divider ────────────────────────────────────────────────────────────
@@ -807,20 +861,6 @@ public sealed class MainWindow : Window, IDisposable
                     }
                 }
 
-                // Tags
-                if (cached.Tags.Length > 0)
-                {
-                    for (int i = 0; i < cached.Tags.Length; i++)
-                    {
-                        if (i > 0) ImGui.SameLine(0, 4);
-                        var col = EventRenderer.GetTagColor(cached.Tags[i]);
-                        using var c1 = ImRaii.PushColor(ImGuiCol.Button,        col with { W = 0.22f });
-                        using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, col with { W = 0.38f });
-                        using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  col with { W = 0.50f });
-                        using var c4 = ImRaii.PushColor(ImGuiCol.Text,          col with { W = 0.90f });
-                        ImGui.SmallButton($" {cached.Tags[i]} ##{ev.Id}fvtag{i}");
-                    }
-                }
             }
         }
 
@@ -844,8 +884,7 @@ public sealed class MainWindow : Window, IDisposable
         var iTL = new Vector2(cardTL.X + padX, cardTL.Y + padY);
         var iBR = iTL + new Vector2(iconSz, iconSz);
 
-        var iconUrl = !string.IsNullOrEmpty(firstEv.TeamIconUrl) ? firstEv.TeamIconUrl : firstEv.BannerUrl;
-        var icon    = !string.IsNullOrEmpty(iconUrl) ? EventRenderer.IconCache?.GetOrQueue(iconUrl) : null;
+        var icon = !string.IsNullOrEmpty(info.IconUrl) ? EventRenderer.IconCache?.GetOrQueue(info.IconUrl) : null;
 
         if (icon != null)
         {
@@ -869,7 +908,7 @@ public sealed class MainWindow : Window, IDisposable
         {
             dl.AddRectFilled(iTL, iBR, ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.13f }), 4f * gs);
             dl.AddRect(      iTL, iBR, ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.30f }), 4f * gs, 0, gs);
-            string initial = source == EventSource.Partake ? "P" : "V";
+            string initial = info.Source == EventSource.Partake ? "P" : "V";
             var    initSz  = ImGui.CalcTextSize(initial);
             dl.AddText(
                 iTL + new Vector2((iconSz - initSz.X) * 0.5f, (iconSz - initSz.Y) * 0.5f),
