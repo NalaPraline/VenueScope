@@ -523,7 +523,17 @@ public static class EventRenderer
 
     // ── Flag popup ────────────────────────────────────────────────────────────
 
-    private static void DrawFlagPopup()
+    public static void OpenFlagPopup(string eventId)
+    {
+        _flagVenueId  = eventId.StartsWith("ffxivenue-") ? eventId[10..] : eventId;
+        _flagCategory = 0;
+        _flagDesc     = string.Empty;
+        _flagStatus   = string.Empty;
+        _flagBusy     = false;
+        ImGui.OpenPopup("##venueflagpopup");
+    }
+
+    public static void DrawFlagPopup()
     {
         float gs = ImGuiHelpers.GlobalScale;
         ImGui.SetNextWindowSize(new Vector2(360f * gs, 0f));

@@ -67,7 +67,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Favorites view now shows a card per venue or team. Each card displays the venue image, all upcoming events in compact rows, a LIVE indicator when the venue is open, and an Unfollow button."
+          changelog: "Favorites: server/DC now shown per event row, Partake event titles visible, cards sorted by urgency, report button restored, switching to Favorites resets DC filter."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

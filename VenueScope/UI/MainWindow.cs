@@ -295,7 +295,9 @@ public sealed class MainWindow : Window, IDisposable
 
         // ── FAVORITES ─────────────────────────────────────────────────────────
         DrawSidebarLabel("FAVORITES");
+        bool prevFavoritesOnly = _favoritesOnly;
         DrawSidebarToggleItem("\u2605 Favorites", ref _favoritesOnly, new Vector4(1.00f, 0.82f, 0.14f, 1f));
+        if (_favoritesOnly && !prevFavoritesOnly) ClearDcSelection();
 
         ImGui.Spacing();
         DrawSidebarRule();
@@ -650,7 +652,15 @@ public sealed class MainWindow : Window, IDisposable
                 groups.Add((Key: key, Info: info, Events: new List<VenueEvent>()));
         }
 
-        groups = groups.OrderBy(g => g.Info.Name).ToList();
+        var sortRng = new Random(_shuffleSeed);
+        groups = groups
+            .Select(g => (g.Key, g.Info, g.Events,
+                SortGroup: g.Events.Count > 0 ? g.Events.Min(e => GetSortGroup(e)) : 3,
+                Rnd: sortRng.NextDouble()))
+            .OrderBy(x => x.SortGroup)
+            .ThenBy(x => x.Rnd)
+            .Select(x => (x.Key, x.Info, x.Events))
+            .ToList();
 
         ImGui.Spacing();
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 8f * gs);
@@ -763,18 +773,6 @@ public sealed class MainWindow : Window, IDisposable
             }
         }
 
-        // ── Server · DC ────────────────────────────────────────────────────────
-        if (!string.IsNullOrEmpty(info.DataCenter) || !string.IsNullOrEmpty(info.Server))
-        {
-            var serverDc = !string.IsNullOrEmpty(info.Server)
-                ? (string.IsNullOrEmpty(info.DataCenter)
-                    ? info.Server
-                    : $"{info.Server} · {info.DataCenter}")
-                : info.DataCenter;
-            using (ImRaii.PushColor(ImGuiCol.Text, ColSubtitle))
-                ImGui.TextUnformatted(serverDc);
-        }
-
         // ── Tags (deduplicated, folder level) ──────────────────────────────────
         if (folderTags.Count > 0)
         {
@@ -815,6 +813,20 @@ public sealed class MainWindow : Window, IDisposable
                 using (ImRaii.PushColor(ImGuiCol.Text, timeColor))
                     ImGui.TextUnformatted(cached.StartsAtLocal);
 
+                // Server · DC inline
+                var serverDcInline = !string.IsNullOrEmpty(info.Server) && !string.IsNullOrEmpty(info.DataCenter)
+                    ? $"{info.Server} · {info.DataCenter}"
+                    : !string.IsNullOrEmpty(info.DataCenter) ? info.DataCenter : info.Server;
+                if (!string.IsNullOrEmpty(serverDcInline))
+                {
+                    ImGui.SameLine(0, 6);
+                    using (ImRaii.PushColor(ImGuiCol.Text, ColDivider))
+                        ImGui.TextUnformatted("\u00b7");
+                    ImGui.SameLine(0, 6);
+                    using (ImRaii.PushColor(ImGuiCol.Text, ColSubtitle with { W = 0.70f }))
+                        ImGui.TextUnformatted(serverDcInline);
+                }
+
                 if (!string.IsNullOrEmpty(cached.Location))
                 {
                     ImGui.SameLine(0, 6);
@@ -825,11 +837,20 @@ public sealed class MainWindow : Window, IDisposable
                         ImGui.TextUnformatted(cached.Location);
                 }
 
-                // Right-aligned Open / Teleport buttons
+                // Partake event title after location
+                if (ev.Source == EventSource.Partake && !string.IsNullOrEmpty(ev.Title))
+                {
+                    ImGui.SameLine(0, 6);
+                    using (ImRaii.PushColor(ImGuiCol.Text, ColSubtitle with { W = 0.60f }))
+                        ImGui.TextUnformatted(ev.Title);
+                }
+
+                // Right-aligned Open / Teleport / Report buttons
                 float evRight = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
                 float evBtnW  = 0f;
                 if (!string.IsNullOrEmpty(ev.EventUrl))       evBtnW += 52f * gs + spc;
                 if (!string.IsNullOrEmpty(ev.LifestreamCode)) evBtnW += 90f * gs + spc;
+                if (ev.Source == EventSource.FFXIVenue)        evBtnW += 32f * gs + spc;
 
                 if (evBtnW > 0f)
                 {
@@ -844,11 +865,11 @@ public sealed class MainWindow : Window, IDisposable
                         if (ImGui.SmallButton($" Open ##{ev.Id}fv"))
                             Util.OpenLink(ev.EventUrl);
                         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Open event page");
-                        if (!string.IsNullOrEmpty(ev.LifestreamCode)) ImGui.SameLine(0, 4);
                     }
 
                     if (!string.IsNullOrEmpty(ev.LifestreamCode))
                     {
+                        if (!string.IsNullOrEmpty(ev.EventUrl)) ImGui.SameLine(0, 4);
                         bool lsAvail = Plugin.IsLifestreamAvailable();
                         using var c1 = ImRaii.PushColor(ImGuiCol.Button,        lsAvail ? new Vector4(0.18f, 0.36f, 0.22f, 0.65f) : new Vector4(0.28f, 0.20f, 0.20f, 0.65f));
                         using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, lsAvail ? new Vector4(0.24f, 0.52f, 0.30f, 0.90f) : new Vector4(0.40f, 0.26f, 0.26f, 0.90f));
@@ -859,9 +880,22 @@ public sealed class MainWindow : Window, IDisposable
                         if (ImGui.IsItemHovered())
                             ImGui.SetTooltip(lsAvail ? $"/li {ev.LifestreamCode}" : "Lifestream is not installed");
                     }
-                }
 
+                    if (ev.Source == EventSource.FFXIVenue)
+                    {
+                        if (!string.IsNullOrEmpty(ev.EventUrl) || !string.IsNullOrEmpty(ev.LifestreamCode))
+                            ImGui.SameLine(0, 4);
+                        using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.35f, 0.12f, 0.12f, 0.65f));
+                        using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.55f, 0.18f, 0.18f, 0.90f));
+                        using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.70f, 0.22f, 0.22f, 1.00f));
+                        using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(1.00f, 0.40f, 0.40f, 1.00f));
+                        if (ImGui.SmallButton($" ! ##{ev.Id}fvflag"))
+                            EventRenderer.OpenFlagPopup(ev.Id);
+                        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Report this venue");
+                    }
+                }
             }
+            EventRenderer.DrawFlagPopup();
         }
 
         ImGui.Dummy(new Vector2(0f, padY));
