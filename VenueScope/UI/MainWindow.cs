@@ -7,6 +7,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
+using Dalamud.Utility;
 using VenueScope.Helpers;
 using VenueScope.Models;
 using VenueScope.Services;
@@ -468,6 +469,12 @@ public sealed class MainWindow : Window, IDisposable
 
     private void DrawMainContent()
     {
+        if (_favoritesOnly)
+        {
+            DrawFavoritesGrouped();
+            return;
+        }
+
         float gs = ImGuiHelpers.GlobalScale;
 
         var baseEvents = GetBaseEvents();
@@ -590,6 +597,219 @@ public sealed class MainWindow : Window, IDisposable
             if (remaining > 0f)
                 ImGui.Dummy(new Vector2(0f, remaining));
         }
+    }
+
+    // ══ Favorites Grouped View ════════════════════════════════════════════════
+
+    private void DrawFavoritesGrouped()
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+
+        var favEvents = GetBaseEvents();
+        if (_config.HideEndedEvents)
+        {
+            var now = DateTime.UtcNow;
+            favEvents = favEvents.Where(e => e.EndTime == null || e.EndTime.Value.ToUniversalTime() > now).ToList();
+        }
+
+        ImGui.Spacing();
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 8f * gs);
+
+        if (favEvents.Count == 0)
+        {
+            ImGui.TextColored(ColSubtitle, "No favorites yet. Star a venue or team to follow it here.");
+            return;
+        }
+
+        // Group FFXIVenue by event Id, Partake by TeamId
+        var groups = favEvents
+            .GroupBy(e => e.Source == EventSource.FFXIVenue
+                ? $"ffxiv:{e.Id}"
+                : $"partake:{e.TeamId}")
+            .Select(g =>
+            {
+                var first = g.First();
+                string name = first.Source == EventSource.FFXIVenue
+                    ? first.Title
+                    : first.TeamName;
+                return (Name: name, Events: g.ToList(), Source: first.Source);
+            })
+            .OrderBy(g => g.Name)
+            .ToList();
+
+        ImGui.TextColored(ColSubtitle,
+            $"{groups.Count} followed venue{(groups.Count != 1 ? "s" : "")}");
+        ImGui.Spacing();
+
+        using var child = ImRaii.Child("##favlist", Vector2.Zero, false);
+        if (!child.Success) return;
+
+        foreach (var (name, events, source) in groups)
+        {
+            ImGui.PushID($"{source}{events[0].Id}{events[0].TeamId}");
+            DrawVenueFolder(name, events, source);
+            ImGui.PopID();
+            ImGui.Dummy(new Vector2(0f, 5f * gs));
+        }
+    }
+
+    private void DrawVenueFolder(string venueName, List<VenueEvent> events, EventSource source)
+    {
+        float gs       = ImGuiHelpers.GlobalScale;
+        var   firstEv  = events[0];
+        var   srcColor = source == EventSource.Partake ? ColPartake : ColFFXIVenue;
+        var   colCardBg = new Vector4(0.13f, 0.13f, 0.20f, 1.00f);
+
+        float cardW  = ImGui.GetContentRegionAvail().X;
+        var   cardTL = ImGui.GetCursorScreenPos();
+        var   dl     = ImGui.GetWindowDrawList();
+
+        float padX   = 14f * gs;
+        float padY   = 8f  * gs;
+        float iconSz = 32f * gs;
+        float indent = padX + iconSz + 10f * gs;
+
+        dl.ChannelsSplit(2);
+        dl.ChannelsSetCurrent(1);
+
+        ImGui.Dummy(new Vector2(0f, padY));
+        ImGui.Indent(indent);
+
+        // ── Name + Unfollow ────────────────────────────────────────────────────
+        float spc       = ImGui.GetStyle().ItemSpacing.X;
+        float unfollowW = ImGui.CalcTextSize("\u2605 Unfollow").X
+                          + ImGui.GetStyle().FramePadding.X * 2f + spc;
+        float nameAvail = ImGui.GetContentRegionAvail().X - unfollowW - 8f * gs;
+        float rightEdge = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
+        float lineH     = ImGui.GetTextLineHeight();
+
+        var p0 = ImGui.GetCursorScreenPos();
+        ImGui.PushClipRect(p0, p0 + new Vector2(nameAvail, lineH + 2f), true);
+        using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.94f, 0.94f, 1.00f, 1f)))
+            ImGui.TextUnformatted(venueName.Length > 0 ? venueName : "(unnamed)");
+        ImGui.PopClipRect();
+
+        ImGui.SameLine(rightEdge - unfollowW);
+
+        using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.28f, 0.22f, 0.04f, 0.70f)))
+        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.44f, 0.32f, 0.06f, 0.90f)))
+        using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.56f, 0.40f, 0.08f, 1.00f)))
+        using (ImRaii.PushColor(ImGuiCol.Text,          new Vector4(1.00f, 0.82f, 0.14f, 1f)))
+        {
+            if (ImGui.SmallButton($"\u2605 Unfollow##{firstEv.Id}unfollow"))
+            {
+                if (source == EventSource.FFXIVenue)
+                    _config.FavoriteEventIds.Remove(firstEv.Id);
+                else
+                    _config.FavoritePartakeTeamIds.Remove(firstEv.TeamId);
+                _config.Save();
+                _filterCache.Clear();
+            }
+        }
+
+        // ── Server · DC ────────────────────────────────────────────────────────
+        if (!string.IsNullOrEmpty(firstEv.DataCenter) || !string.IsNullOrEmpty(firstEv.Server))
+        {
+            var serverDc = !string.IsNullOrEmpty(firstEv.Server)
+                ? (string.IsNullOrEmpty(firstEv.DataCenter)
+                    ? firstEv.Server
+                    : $"{firstEv.Server} · {firstEv.DataCenter}")
+                : firstEv.DataCenter;
+            using (ImRaii.PushColor(ImGuiCol.Text, ColSubtitle))
+                ImGui.TextUnformatted(serverDc);
+        }
+
+        // ── Divider ────────────────────────────────────────────────────────────
+        ImGui.Spacing();
+        {
+            var lp0 = ImGui.GetCursorScreenPos();
+            var lp1 = lp0 + new Vector2(ImGui.GetContentRegionAvail().X - padX, 1f);
+            dl.AddRectFilled(lp0, lp1, ImGui.ColorConvertFloat4ToU32(ColDivider with { W = 0.50f }));
+            ImGui.Dummy(new Vector2(0f, 4f * gs));
+        }
+
+        // ── Event rows ─────────────────────────────────────────────────────────
+        foreach (var ev in events.OrderBy(e => e.StartTime))
+        {
+            var cached = _stringCache.GetOrCompute(ev);
+
+            using (ImRaii.PushColor(ImGuiCol.Text, ColSubtitle with { W = 0.85f }))
+                ImGui.TextUnformatted(cached.StartsAtLocal);
+
+            if (!string.IsNullOrEmpty(cached.Location))
+            {
+                ImGui.SameLine(0, 6);
+                using (ImRaii.PushColor(ImGuiCol.Text, ColDivider))
+                    ImGui.TextUnformatted("\u00b7");
+                ImGui.SameLine(0, 6);
+                using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.36f, 0.76f, 0.52f, 0.85f)))
+                    ImGui.TextUnformatted(cached.Location);
+            }
+
+            // Right-aligned Open / Teleport buttons
+            float evRight = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
+            float evBtnW  = 0f;
+            if (!string.IsNullOrEmpty(ev.EventUrl))       evBtnW += 52f * gs + spc;
+            if (!string.IsNullOrEmpty(ev.LifestreamCode)) evBtnW += 90f * gs + spc;
+
+            if (evBtnW > 0f)
+            {
+                ImGui.SameLine(evRight - evBtnW);
+
+                if (!string.IsNullOrEmpty(ev.EventUrl))
+                {
+                    using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.16f, 0.30f, 0.54f, 0.65f));
+                    using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.22f, 0.42f, 0.72f, 0.90f));
+                    using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.28f, 0.52f, 0.88f, 1.00f));
+                    using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.72f, 0.86f, 1.00f, 1.00f));
+                    if (ImGui.SmallButton($" Open ##{ev.Id}fv"))
+                        Util.OpenLink(ev.EventUrl);
+                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Open event page");
+                    if (!string.IsNullOrEmpty(ev.LifestreamCode)) ImGui.SameLine(0, 4);
+                }
+
+                if (!string.IsNullOrEmpty(ev.LifestreamCode))
+                {
+                    bool lsAvail = Plugin.IsLifestreamAvailable();
+                    using var c1 = ImRaii.PushColor(ImGuiCol.Button,        lsAvail ? new Vector4(0.18f, 0.36f, 0.22f, 0.65f) : new Vector4(0.28f, 0.20f, 0.20f, 0.65f));
+                    using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, lsAvail ? new Vector4(0.24f, 0.52f, 0.30f, 0.90f) : new Vector4(0.40f, 0.26f, 0.26f, 0.90f));
+                    using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  lsAvail ? new Vector4(0.30f, 0.64f, 0.38f, 1.00f) : new Vector4(0.50f, 0.32f, 0.32f, 1.00f));
+                    using var c4 = ImRaii.PushColor(ImGuiCol.Text,          lsAvail ? new Vector4(0.62f, 1.00f, 0.70f, 1.00f) : new Vector4(0.80f, 0.50f, 0.50f, 1.00f));
+                    if (ImGui.SmallButton($" Teleport ##{ev.Id}fvt") && lsAvail)
+                        Plugin.CommandManager.ProcessCommand($"/li {ev.LifestreamCode}");
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip(lsAvail ? $"/li {ev.LifestreamCode}" : "Lifestream is not installed");
+                }
+            }
+        }
+
+        ImGui.Dummy(new Vector2(0f, padY));
+        ImGui.Unindent(indent);
+
+        // ── Card background ────────────────────────────────────────────────────
+        var cardBR = new Vector2(cardTL.X + cardW, ImGui.GetCursorScreenPos().Y);
+        dl.ChannelsSetCurrent(0);
+
+        dl.AddRectFilled(cardTL, cardBR, ImGui.ColorConvertFloat4ToU32(colCardBg), 6f * gs);
+        dl.AddRectFilled(
+            cardTL + new Vector2(0f, 4f * gs),
+            new Vector2(cardTL.X + 3f * gs, cardBR.Y - 4f * gs),
+            ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.90f }), 2f);
+
+        // Source icon box
+        var iTL = new Vector2(cardTL.X + padX, cardTL.Y + padY);
+        var iBR = iTL + new Vector2(iconSz, iconSz);
+        dl.AddRectFilled(iTL, iBR, ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.13f }), 4f * gs);
+        dl.AddRect(      iTL, iBR, ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.30f }), 4f * gs, 0, gs);
+
+        string initial = source == EventSource.Partake ? "P" : "V";
+        var    initSz  = ImGui.CalcTextSize(initial);
+        dl.AddText(
+            iTL + new Vector2((iconSz - initSz.X) * 0.5f, (iconSz - initSz.Y) * 0.5f),
+            ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.70f }),
+            initial);
+
+        dl.ChannelsMerge();
     }
 
     // ══ Helpers ═══════════════════════════════════════════════════════════════

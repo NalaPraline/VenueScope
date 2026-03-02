@@ -67,7 +67,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Favorites now follow organizers/venues instead of individual events — starring a Partake event will highlight all future events from the same team."
+          changelog: "Favorites view now shows a card per venue/team, with all their upcoming events listed inside. Each card has an Unfollow button to stop following directly from the favorites view."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
