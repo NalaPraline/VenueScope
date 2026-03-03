@@ -3,10 +3,10 @@
   "Name": "VenueScope",
   "Punchline": "Browse FFXIV community events in-game.",
   "Description": "Browse FFXIV community events from Partake.gg and FFXIVenue directly in-game. Filter by data center, time, and tags. Copy Lifestream teleport codes in one click.\n\nCommands:\n/venuescope or /vs — Open VenueScope",
-  "ApplicableVersion": "2026.01.30.0000.0000",
+  "ApplicableVersion": "any",
   "Tags": [
     "events",
-    "venue",
+    "venue",on uet ma
     "community",
     "partake",
     "ffxivenue"
