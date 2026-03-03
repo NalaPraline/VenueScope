@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Change ApplicableVersion to any."
+          changelog: "Fix Lifestream teleport code for locations with colons."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

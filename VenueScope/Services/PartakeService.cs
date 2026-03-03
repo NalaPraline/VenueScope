@@ -446,7 +446,7 @@ public class PartakeService : IDisposable
         bool lastWasSpace = false;
         foreach (char c in s)
         {
-            if (c == '/' || c == '|')
+            if (c == '/' || c == '|' || c == ':')
             {
                 if (!lastWasSpace) { sb.Append(' '); lastWasSpace = true; }
             }
