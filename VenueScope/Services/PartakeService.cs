@@ -436,6 +436,15 @@ public class PartakeService : IDisposable
     /// <summary>Removes stray / and | characters left over after normalization.</summary>
     private static string CleanLifestreamCode(string s)
     {
+        // Normalize known housing district name variants to what Lifestream expects
+        var ri = System.Text.RegularExpressions.RegexOptions.IgnoreCase;
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bLavender Beds?\b",  "Lavender Beds",  ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bMists?\b",           "Mist",           ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bThe Goblet\b",       "The Goblet",     ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bGoblets?\b",         "The Goblet",     ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bEmpyreum\b",         "Empyreum",       ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bShirogane\b",        "Shirogane",      ri);
+
         // Expand concatenated ward+plot (W7P5 → W7 P5) before other cleanup
         s = System.Text.RegularExpressions.Regex.Replace(
             s, @"\bW(\d+)P(\d+)\b", "W$1 P$2",
