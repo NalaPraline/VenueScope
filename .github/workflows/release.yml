@@ -36,21 +36,6 @@ jobs:
           $files = Get-ChildItem $dir | Where-Object { $_.Extension -ne ".zip" }
           Compress-Archive -Path ($files.FullName) -DestinationPath "latest.zip" -Force
 
-      - name: Update pluginmaster.json
-        run: |
-          $version = "${{ github.ref_name }}" -replace '^v', ''
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git checkout main
-          git pull origin main
-          $content = Get-Content docs/pluginmaster.json -Raw
-          $content = $content -replace '"AssemblyVersion":\s*"[^"]*"', "`"AssemblyVersion`": `"$version`""
-          Set-Content docs/pluginmaster.json -Value $content -Encoding UTF8 -NoNewline
-          git add docs/pluginmaster.json
-          git diff --cached --quiet || git commit -m "chore: bump pluginmaster.json to ${{ github.ref_name }}"
-          git push origin main
-
       - name: Determine release type
         id: reltype
         run: |
@@ -67,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Events now sort by date in upcoming view, upcoming tab limited to next 14 days."
+          changelog: "Change ApplicableVersion to any."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
