@@ -57,6 +57,13 @@ public class Configuration : IPluginConfiguration
     // Persistent display info for followed venues/teams (key: "ffxiv:{id}" or "partake:{teamId}")
     public Dictionary<string, FavoriteVenueInfo> FavoriteVenueCache { get; set; } = new();
 
+    // ── Hidden venues ──────────────────────────────────────────────────────
+    public HashSet<string> HiddenVenueIds      { get; set; } = new(); // FFXIVenue venue IDs
+    public HashSet<int>    HiddenPartakeTeamIds { get; set; } = new(); // Partake team IDs
+
+    // Persistent display info for hidden venues (key: "ffxiv:{id}" or "partake:{teamId}")
+    public Dictionary<string, FavoriteVenueInfo> HiddenVenueCache { get; set; } = new();
+
     // ── Legacy (kept for compat, not exposed in UI) ────────────────────────
     public List<string> FavoriteDataCenters { get; set; } = new();
     public List<string> FavoriteServers     { get; set; } = new();

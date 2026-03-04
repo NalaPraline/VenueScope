@@ -34,6 +34,11 @@ public sealed class MainWindow : Window, IDisposable
     private DateTime _lastSeenRefresh = DateTime.MinValue;
     private bool     _favoritesOnly   = false;
 
+    // ── Hide banner ───────────────────────────────────────────────────────────
+    private string   _hideBannerName  = string.Empty;
+    private DateTime _hideBannerUntil = DateTime.MinValue;
+    private const float HideBannerDuration = 6f; // seconds
+
     private enum TimeFilter { All = 0, LiveNow = 1, Today = 2, Upcoming = 3 }
 
     // ── Palette ───────────────────────────────────────────────────────────────
@@ -56,6 +61,13 @@ public sealed class MainWindow : Window, IDisposable
         _partake    = partake;
         _config     = config;
         _openConfig = openConfig;
+
+        EventRenderer.OnHideVenue = name =>
+        {
+            _cache.TagsByDc.Clear();
+            _hideBannerName  = name;
+            _hideBannerUntil = DateTime.Now.AddSeconds(HideBannerDuration);
+        };
 
         SizeCondition   = ImGuiCond.FirstUseEver;
         Size            = new Vector2(1050, 620);
@@ -472,10 +484,82 @@ public sealed class MainWindow : Window, IDisposable
         }
     }
 
+    // ══ Hide Banner ═══════════════════════════════════════════════════════════
+
+    private void DrawHideBanner()
+    {
+        if (DateTime.Now >= _hideBannerUntil || string.IsNullOrEmpty(_hideBannerName))
+            return;
+
+        float gs       = ImGuiHelpers.GlobalScale;
+        float elapsed  = (float)(DateTime.Now - _hideBannerUntil.AddSeconds(-HideBannerDuration)).TotalSeconds;
+        float progress = Math.Clamp(1f - elapsed / HideBannerDuration, 0f, 1f);
+
+        var   dl   = ImGui.GetWindowDrawList();
+        var   tl   = ImGui.GetCursorScreenPos();
+        float w    = ImGui.GetContentRegionAvail().X;
+        float padX = 12f * gs;
+        float padY = 8f  * gs;
+        float lineH = ImGui.GetTextLineHeight();
+        float cardH = padY * 2f + lineH * 2f + 4f * gs; // 2 text lines + inner spacing
+
+        var br = tl + new Vector2(w, cardH);
+
+        // Card background + left accent bar
+        dl.AddRectFilled(tl, br,
+            ImGui.ColorConvertFloat4ToU32(new Vector4(0.13f, 0.10f, 0.07f, 0.96f)), 5f * gs);
+        dl.AddRectFilled(
+            tl + new Vector2(0f, 4f * gs),
+            new Vector2(tl.X + 3f * gs, br.Y - 4f * gs),
+            ImGui.ColorConvertFloat4ToU32(new Vector4(1.00f, 0.55f, 0.12f, 0.90f)), 2f);
+
+        // Progress bar at bottom (drains left to right as time passes)
+        dl.AddRectFilled(
+            new Vector2(tl.X, br.Y - 3f * gs), br,
+            ImGui.ColorConvertFloat4ToU32(new Vector4(0.25f, 0.18f, 0.06f, 1.00f)));
+        dl.AddRectFilled(
+            new Vector2(tl.X, br.Y - 3f * gs),
+            new Vector2(tl.X + w * progress, br.Y),
+            ImGui.ColorConvertFloat4ToU32(new Vector4(1.00f, 0.62f, 0.18f, 0.75f)));
+
+        // Line 1: venue name
+        ImGui.SetCursorScreenPos(tl + new Vector2(padX, padY));
+        using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(1.00f, 0.72f, 0.30f, 1f)))
+            ImGui.TextUnformatted($"\"{_hideBannerName}\" is now hidden");
+
+        // Line 2: hint
+        ImGui.SetCursorScreenPos(tl + new Vector2(padX, padY + lineH + 4f * gs));
+        using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.60f, 0.60f, 0.68f, 1f)))
+            ImGui.TextUnformatted("Their events won't appear anymore. To unhide, open");
+
+        // "Settings" inline link
+        ImGui.SameLine(0, 4);
+        using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(1.00f, 0.72f, 0.30f, 1f)))
+        {
+            ImGui.TextUnformatted("Settings");
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+                ImGui.SetTooltip("Open Settings → Hidden Venues");
+            }
+            if (ImGui.IsItemClicked()) _openConfig();
+        }
+
+        ImGui.SameLine(0, 2);
+        using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.60f, 0.60f, 0.68f, 1f)))
+            ImGui.TextUnformatted("→ Hidden Venues.");
+
+        // Advance cursor past the card + spacing
+        ImGui.SetCursorScreenPos(new Vector2(tl.X, br.Y));
+        ImGui.Dummy(new Vector2(w, 6f * gs));
+    }
+
     // ══ Main Content ══════════════════════════════════════════════════════════
 
     private void DrawMainContent()
     {
+        DrawHideBanner();
+
         if (_favoritesOnly)
         {
             DrawFavoritesGrouped();
@@ -1001,7 +1085,9 @@ public sealed class MainWindow : Window, IDisposable
             ? _sourceFilter.ToString()!
             : "all";
         string favPart = _favoritesOnly ? $"|fav{ComputeFavHash()}" : string.Empty;
-        return $"{dcPart}|{srcPart}{favPart}";
+        int    hidHash = ComputeHiddenHash();
+        string hidPart = hidHash != 0 ? $"|hid{hidHash}" : string.Empty;
+        return $"{dcPart}|{srcPart}{favPart}{hidPart}";
     }
 
     private int ComputeFavHash()
@@ -1012,6 +1098,19 @@ public sealed class MainWindow : Window, IDisposable
             foreach (var id in _config.FavoriteEventIds.OrderBy(x => x))
                 h = h * 31 + id.GetHashCode();
             foreach (var id in _config.FavoritePartakeTeamIds.OrderBy(x => x))
+                h = h * 31 + id;
+            return h;
+        }
+    }
+
+    private int ComputeHiddenHash()
+    {
+        unchecked
+        {
+            int h = 17;
+            foreach (var id in _config.HiddenVenueIds.OrderBy(x => x))
+                h = h * 31 + id.GetHashCode();
+            foreach (var id in _config.HiddenPartakeTeamIds.OrderBy(x => x))
                 h = h * 31 + id;
             return h;
         }
@@ -1051,6 +1150,11 @@ public sealed class MainWindow : Window, IDisposable
                     ? _config.FavoriteEventIds.Contains(e.Id)
                     : e.TeamId > 0 && _config.FavoritePartakeTeamIds.Contains(e.TeamId));
 
+        // Hidden venues filter — applies even in favorites view
+        events = events.Where(e =>
+            e.Source == EventSource.FFXIVenue
+                ? !_config.HiddenVenueIds.Contains(e.Id)
+                : !(e.TeamId > 0 && _config.HiddenPartakeTeamIds.Contains(e.TeamId)));
 
         // Reroll shuffle seed each time the cache is refreshed
         if (_cache.LastRefresh != _lastSeenRefresh)

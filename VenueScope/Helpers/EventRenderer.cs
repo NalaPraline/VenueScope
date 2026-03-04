@@ -7,11 +7,12 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Utility;
 using System.Numerics;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using VenueScope.Models;
 
 namespace VenueScope.Helpers;
 
-/// <summary>
+/// <summary>a
 /// Renders a styled event card: thumbnail placeholder, dark background, source
 /// accent bar, status dot, and right-aligned action buttons.
 /// </summary>
@@ -37,6 +38,9 @@ public static class EventRenderer
 
     /// <summary>Set by Plugin on startup. Used to submit venue flag reports.</summary>
     public static Services.FFXIVenueService? FlagService;
+
+    /// <summary>Invoked after a venue is hidden. Argument is the display name of the hidden venue.</summary>
+    public static Action<string>? OnHideVenue;
 
     // ── Flag popup state (one popup at a time) ────────────────────────────────
     private static string _flagVenueId  = string.Empty;
@@ -223,7 +227,7 @@ public static class EventRenderer
 
         DrawActions(ev, actW, config);
     }
-
+    
     private static void DrawInfoRow(VenueEvent ev, CachedEventStrings cached,
                                     Vector4 srcColor, Vector4 statusColor)
     {
@@ -383,6 +387,7 @@ public static class EventRenderer
         float gs  = ImGuiHelpers.GlobalScale;
         float spc = ImGui.GetStyle().ItemSpacing.X;
         float w   = 32f * gs + spc; // star button always present
+        w += 52f * gs + spc;                                                // hide button always present
         if (!string.IsNullOrEmpty(ev.EventUrl))       w += 52f * gs + spc;
         if (!string.IsNullOrEmpty(ev.LifestreamCode)) w += 90f * gs + spc;
         if (ev.Source == EventSource.FFXIVenue)       w += 32f * gs + spc; // flag button
@@ -459,6 +464,56 @@ public static class EventRenderer
             : (isFav ? "Unfollow this venue" : "Follow this venue");
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip(favTooltip);
+        ImGui.SameLine(0, 4);
+
+        // ── Hide button ───────────────────────────────────────────────────────
+        using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.25f, 0.12f, 0.12f, 0.60f)))
+        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.45f, 0.18f, 0.18f, 0.85f)))
+        using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.60f, 0.22f, 0.22f, 1.00f)))
+        using (ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.90f, 0.42f, 0.42f, 1.00f)))
+        {
+            if (ImGui.SmallButton($" Hide ##{ev.Id}hide"))
+            {
+                if (ev.Source == EventSource.Partake && ev.TeamId > 0)
+                {
+                    string key = $"partake:{ev.TeamId}";
+                    config.FavoritePartakeTeamIds.Remove(ev.TeamId);
+                    config.FavoriteVenueCache.Remove(key);
+                    config.HiddenPartakeTeamIds.Add(ev.TeamId);
+                    config.HiddenVenueCache[key] = new FavoriteVenueInfo
+                    {
+                        TeamId     = ev.TeamId,
+                        Name       = ev.TeamName,
+                        Server     = ev.Server,
+                        DataCenter = ev.DataCenter,
+                        IconUrl    = !string.IsNullOrEmpty(ev.TeamIconUrl) ? ev.TeamIconUrl : ev.BannerUrl,
+                        Source     = EventSource.Partake,
+                    };
+                }
+                else if (ev.Source == EventSource.FFXIVenue)
+                {
+                    string key = $"ffxiv:{ev.Id}";
+                    config.FavoriteEventIds.Remove(ev.Id);
+                    config.FavoriteVenueCache.Remove(key);
+                    config.HiddenVenueIds.Add(ev.Id);
+                    config.HiddenVenueCache[key] = new FavoriteVenueInfo
+                    {
+                        VenueId    = ev.Id,
+                        Name       = ev.Title,
+                        Server     = ev.Server,
+                        DataCenter = ev.DataCenter,
+                        IconUrl    = !string.IsNullOrEmpty(ev.BannerUrl) ? ev.BannerUrl : ev.TeamIconUrl,
+                        Source     = EventSource.FFXIVenue,
+                    };
+                }
+                string displayName = ev.Source == EventSource.Partake
+                    ? (string.IsNullOrEmpty(ev.TeamName) ? ev.Title : ev.TeamName)
+                    : ev.Title;
+                config.Save();
+                OnHideVenue?.Invoke(displayName);
+            }
+        }
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Hide this venue");
         ImGui.SameLine(0, 4);
 
         if (!string.IsNullOrEmpty(ev.EventUrl))

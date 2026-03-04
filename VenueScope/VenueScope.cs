@@ -48,6 +48,7 @@ public sealed class Plugin : IDalamudPlugin
         _teamIconCache       = new TeamIconCache(TextureProvider, Log);
         EventRenderer.IconCache    = _teamIconCache;
         EventRenderer.FlagService  = _ffxivenueService;
+        // OnHideVenue is set by MainWindow after construction (needs access to banner state)
 
         // UI
         ConfigWindow = new ConfigWindow(Configuration, _partakeService, _cacheService);

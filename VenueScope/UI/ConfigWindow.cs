@@ -51,6 +51,8 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.Spacing();
         DrawSectionIntegrations();
         ImGui.Spacing();
+        DrawSectionHiddenVenues();
+        ImGui.Spacing();
         DrawSectionAbout();
     }
 
@@ -277,6 +279,54 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.SameLine(0, 8);
         DrawLinkButton("X / Twitter", "https://x.com/MoroOkami",
             new Vector4(0.80f, 0.80f, 0.80f, 1f));
+
+        ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
+    }
+
+    // ══ Hidden Venues ══════════════════════════════════════════════════════
+
+    private void DrawSectionHiddenVenues()
+    {
+        if (!SectionHeader("  Hidden Venues")) return;
+        ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
+
+        if (_config.HiddenVenueCache.Count == 0)
+        {
+            ImGui.TextColored(ColSubtitle, "No hidden venues.");
+            ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
+            return;
+        }
+
+        foreach (var (key, info) in _config.HiddenVenueCache.ToList())
+        {
+            var    srcColor = info.Source == Models.EventSource.Partake
+                ? new Vector4(0.33f, 0.58f, 0.96f, 1f)
+                : new Vector4(0.62f, 0.32f, 0.92f, 1f);
+            string srcLabel = info.Source == Models.EventSource.Partake ? "[Partake]" : "[FFXIV Venues]";
+
+            using (ImRaii.PushColor(ImGuiCol.Text, srcColor with { W = 0.65f }))
+                ImGui.TextUnformatted(srcLabel);
+            ImGui.SameLine(0, 6);
+
+            string displayName = !string.IsNullOrEmpty(info.Name) ? info.Name : key;
+            ImGui.TextUnformatted(displayName);
+            ImGui.SameLine(0, 8);
+
+            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.14f, 0.28f, 0.14f, 0.70f));
+            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.20f, 0.42f, 0.20f, 0.90f));
+            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.28f, 0.56f, 0.28f, 1.00f));
+            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.50f, 1.00f, 0.55f, 1.00f));
+            if (ImGui.SmallButton($" Unhide ##{key}"))
+            {
+                if (info.Source == Models.EventSource.Partake)
+                    _config.HiddenPartakeTeamIds.Remove(info.TeamId);
+                else
+                    _config.HiddenVenueIds.Remove(info.VenueId);
+                _config.HiddenVenueCache.Remove(key);
+                _config.Save();
+                _cache.TagsByDc.Clear();
+            }
+        }
 
         ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }

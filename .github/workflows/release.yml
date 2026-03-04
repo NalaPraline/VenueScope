@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Fix Lifestream district name normalization."
+          changelog: "Add hide venue button to remove venues from the event list."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
