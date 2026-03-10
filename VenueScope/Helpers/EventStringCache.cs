@@ -5,10 +5,6 @@ using VenueScope.Models;
 
 namespace VenueScope.Helpers;
 
-/// <summary>
-/// Caches formatted display strings for events.
-/// Refreshes every 30 seconds to keep humanized times current.
-/// </summary>
 public class EventStringCache
 {
     private readonly Dictionary<string, CachedEventStrings> _cache = new();
@@ -28,8 +24,6 @@ public class EventStringCache
                 _cachedUpdateStr = string.Empty;
             }
 
-            // Always compare in UTC — Newtonsoft may deserialize datetimes as Local or Utc
-            // depending on the timezone offset in the API response. ToUniversalTime() normalises both.
             var utcNow   = DateTime.UtcNow;
             var startUtc = ev.StartTime.ToUniversalTime();
             var endUtc   = ev.EndTime?.ToUniversalTime();
@@ -46,7 +40,6 @@ public class EventStringCache
                 ? ev.InGameLocation
                 : string.Empty;
 
-            // Humanize() needs DateTimeKind.Utc to compare against UtcNow correctly
             cached = new CachedEventStrings
             {
                 StartsAtHumanized = startUtc.Humanize(),

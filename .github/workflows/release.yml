@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Clean up comment formatting and notification titles."
+          changelog: "Code cleanup."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

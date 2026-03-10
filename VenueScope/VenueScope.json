@@ -2,7 +2,7 @@
   "Author": "Nala Praline",
   "Name": "VenueScope",
   "Punchline": "Browse FFXIV community events in-game.",
-  "Description": "Browse FFXIV community events from Partake.gg and FFXIVenue directly in-game. Filter by data center, time, and tags. Copy Lifestream teleport codes in one click.\n\nCommands:\n/venuescope or /vs — Open VenueScope",
+  "Description": "Browse FFXIV community events directly in-game. Filter by data center, time, and tags.\n\nCommands:\n/venuescope or /vs: open VenueScope",
   "ApplicableVersion": "any",
   "Tags": [
     "events",

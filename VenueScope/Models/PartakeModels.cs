@@ -4,14 +4,12 @@ using System.Collections.Generic;
 
 namespace VenueScope.Models;
 
-// GraphQL response wrapper
 public class EventsResponseType
 {
     [JsonProperty("events")]
     public List<PartakeEvent> Events { get; set; } = new();
 }
 
-/// <summary>Raw Partake.gg event as returned by the GraphQL API.</summary>
 public class PartakeEvent
 {
     [JsonProperty("id")]           public int    Id           { get; set; }

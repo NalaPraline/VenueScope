@@ -12,13 +12,8 @@ using VenueScope.Models;
 
 namespace VenueScope.Helpers;
 
-/// <summary>a
-/// Renders a styled event card: thumbnail placeholder, dark background, source
-/// accent bar, status dot, and right-aligned action buttons.
-/// </summary>
 public static class EventRenderer
 {
-    // Palette
     private static readonly Vector4 ColPartake   = new(0.33f, 0.58f, 0.96f, 1f);
     private static readonly Vector4 ColFFXIVenue = new(0.62f, 0.32f, 0.92f, 1f);
 
@@ -33,27 +28,21 @@ public static class EventRenderer
     private static readonly Vector4 ColNew       = new(1.00f, 0.80f, 0.16f, 1f);
     private static readonly Vector4 ColCardBg    = new(0.13f, 0.13f, 0.20f, 1.00f);
 
-    /// <summary>Set by Plugin on startup. Used to fetch team icon textures.</summary>
     public static Services.TeamIconCache? IconCache;
-
-    /// <summary>Set by Plugin on startup. Used to submit venue flag reports.</summary>
     public static Services.FFXIVenueService? FlagService;
-
-    /// <summary>Invoked after a venue is hidden. Argument is the display name of the hidden venue.</summary>
     public static Action<string>? OnHideVenue;
 
-    // Flag popup state (one popup at a time)
+    // one popup at a time
     private static string _flagVenueId  = string.Empty;
     private static int    _flagCategory = 0;
     private static string _flagDesc     = string.Empty;
     private static bool   _flagBusy     = false;
-    private static string _flagStatus   = string.Empty; // "" | "ok" | "err"
+    private static string _flagStatus   = string.Empty;
 
     private static IDalamudTextureWrap? GetIcon(VenueEvent ev) =>
         IconCache?.GetOrQueue(
             !string.IsNullOrEmpty(ev.TeamIconUrl) ? ev.TeamIconUrl : ev.BannerUrl);
 
-    // Tag color palette
     private static readonly Vector4[] TagPalette =
     [
         new(0.96f, 0.45f, 0.45f, 1f), // coral
@@ -70,7 +59,7 @@ public static class EventRenderer
 
     public static Vector4 GetTagColor(string tag)
     {
-        // Stable hash (GetHashCode is randomized per-session in .NET 5+)
+        // GetHashCode is randomized per-session in .NET 5+
         unchecked
         {
             int h = 17;
@@ -79,15 +68,12 @@ public static class EventRenderer
         }
     }
 
-    // Layout constants (unscaled)
     private const float PadX    = 14f;
     private const float PadY    = 7f;
     private const float ThumbW  = 50f;
     private const float ThumbH  = 42f;
     private const float ThumbGap = 8f;
     
-
-    // Public entry point
 
     public static void DrawEventCard(VenueEvent ev, CachedEventStrings cached, Configuration config)
     {
@@ -106,20 +92,17 @@ public static class EventRenderer
         float thumbGap  = ThumbGap * gs;
         float indent    = padX + thumbW + thumbGap;
 
-        // Split channels: 1 = foreground (ImGui widgets), 0 = background (DrawList)
+        // ch1 = foreground (ImGui widgets), ch0 = background (DrawList)
         dl.ChannelsSplit(2);
         dl.ChannelsSetCurrent(1);
 
-        // Top padding
         ImGui.Dummy(new Vector2(0f, padY));
 
-        // Status dot — sits in the left margin next to the accent bar
         var dotCenter = cardTL + new Vector2(8f * gs, padY + ImGui.GetTextLineHeight() * 0.52f);
         dl.AddCircleFilled(dotCenter, 3.5f * gs, ImGui.ColorConvertFloat4ToU32(statusColor));
 
         ImGui.Indent(indent);
 
-        // Rows
         DrawTitleRow(ev, cached, srcColor, config);
         DrawInfoRow(ev, cached, srcColor, statusColor);
         if (cached.Tags.Length > 0)
@@ -130,22 +113,18 @@ public static class EventRenderer
         ImGui.Dummy(new Vector2(0f, padY));
         ImGui.Unindent(indent);
 
-        // Background layer
         var cardBR = new Vector2(cardTL.X + cardW, ImGui.GetCursorScreenPos().Y);
 
         dl.ChannelsSetCurrent(0);
 
-        // Card background
         dl.AddRectFilled(cardTL, cardBR,
             ImGui.ColorConvertFloat4ToU32(ColCardBg), 6f * gs);
 
-        // Left accent bar (source color)
         dl.AddRectFilled(
             cardTL + new Vector2(0f, 4f * gs),
             new Vector2(cardTL.X + 3f * gs, cardBR.Y - 4f * gs),
             ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.90f }), 2f);
 
-        // Thumbnail
         float thumbTop  = cardTL.Y + padY;
         float thumbLeft = cardTL.X + padX;
         var   tTL       = new Vector2(thumbLeft, thumbTop);
@@ -154,7 +133,7 @@ public static class EventRenderer
         var icon = GetIcon(ev);
         if (icon != null)
         {
-            // Compute UV: center-crop if the image is wider than the thumbnail box
+            // center-crop if the image is wider than the box
             var uv0 = Vector2.Zero;
             var uv1 = Vector2.One;
             if (icon.Width > 0 && icon.Height > 0)
@@ -176,7 +155,6 @@ public static class EventRenderer
         }
         else
         {
-            // Placeholder while loading or no icon
             dl.AddRectFilled(tTL, tBR,
                 ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.13f }), 4f * gs);
             dl.AddRect(tTL, tBR,
@@ -191,11 +169,8 @@ public static class EventRenderer
 
         dl.ChannelsMerge();
 
-        // Flag popup — drawn here so it sits inside the same child window context
         DrawFlagPopup();
     }
-
-    // Rows
 
     private static void DrawTitleRow(VenueEvent ev, CachedEventStrings cached, Vector4 srcColor, Configuration config)
     {
@@ -232,11 +207,9 @@ public static class EventRenderer
     private static void DrawInfoRow(VenueEvent ev, CachedEventStrings cached,
                                     Vector4 srcColor, Vector4 statusColor)
     {
-        // Source badge
         using (ImRaii.PushColor(ImGuiCol.Text, srcColor with { W = 0.50f }))
             ImGui.TextUnformatted(ev.Source == EventSource.Partake ? "Partake" : "FFXIV Venues");
 
-        // Server / DC
         if (!string.IsNullOrEmpty(cached.ServerDc))
         {
             Dot();
@@ -244,7 +217,6 @@ public static class EventRenderer
                 ImGui.TextUnformatted(cached.ServerDc);
         }
 
-        // In-game location (click to copy)
         if (!string.IsNullOrEmpty(cached.Location))
         {
             Dot();
@@ -261,7 +233,7 @@ public static class EventRenderer
             }
         }
 
-        // Host (Partake only — FFXIVenue managers are Discord snowflake IDs)
+        // FFXIVenue managers are Discord snowflake IDs, skip
         if (ev.Source == EventSource.Partake && !string.IsNullOrEmpty(ev.Host))
         {
             Dot();
@@ -269,7 +241,6 @@ public static class EventRenderer
                 ImGui.TextUnformatted($"by {ev.Host}");
         }
 
-        // Attendees
         if (ev.AttendeeCount > 0)
         {
             Dot();
@@ -277,7 +248,6 @@ public static class EventRenderer
                 ImGui.TextUnformatted($"{ev.AttendeeCount} attending");
         }
 
-        // Time
         Dot();
         string timeStr = $"{cached.StartsAtLocal} \u2192 {cached.EndsAtLocal}";
         using (ImRaii.PushColor(ImGuiCol.Text, statusColor with { W = 0.85f }))
@@ -332,7 +302,6 @@ public static class EventRenderer
                 continue;
             }
 
-            // Explicit section header: starts with =
             if (line.StartsWith('='))
             {
                 if (i > 0) ImGui.Spacing();
@@ -341,7 +310,6 @@ public static class EventRenderer
                 continue;
             }
 
-            // Implicit section header: short, few words, no sentence-ending punctuation, no special chars
             var words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             bool isSection = line.Length <= 25
                           && words.Length <= 3
@@ -378,8 +346,6 @@ public static class EventRenderer
         return text.Trim();
     }
 
-    // Actions
-
     private static readonly Vector4 ColFavOn  = new(1.00f, 0.82f, 0.14f, 1f);
     private static readonly Vector4 ColFavOff = new(0.44f, 0.44f, 0.52f, 1f);
 
@@ -387,11 +353,11 @@ public static class EventRenderer
     {
         float gs  = ImGuiHelpers.GlobalScale;
         float spc = ImGui.GetStyle().ItemSpacing.X;
-        float w   = 32f * gs + spc; // star button always present
-        w += 52f * gs + spc;                                                // hide button always present
+        float w   = 32f * gs + spc;
+        w += 52f * gs + spc;
         if (!string.IsNullOrEmpty(ev.EventUrl))       w += 52f * gs + spc;
         if (!string.IsNullOrEmpty(ev.LifestreamCode)) w += 90f * gs + spc;
-        if (ev.Source == EventSource.FFXIVenue)       w += 32f * gs + spc; // flag button
+        if (ev.Source == EventSource.FFXIVenue)       w += 32f * gs + spc;
         return w;
     }
 
@@ -402,7 +368,6 @@ public static class EventRenderer
         float rightEdge = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
         ImGui.SameLine(rightEdge - reservedW);
 
-        // Favorite toggle
         bool isFav = ev.Source == EventSource.Partake
             ? ev.TeamId > 0 && config.FavoritePartakeTeamIds.Contains(ev.TeamId)
             : config.FavoriteEventIds.Contains(ev.Id);
@@ -467,7 +432,6 @@ public static class EventRenderer
             ImGui.SetTooltip(favTooltip);
         ImGui.SameLine(0, 4);
 
-        // Hide button
         using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.25f, 0.12f, 0.12f, 0.60f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.45f, 0.18f, 0.18f, 0.85f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.60f, 0.22f, 0.22f, 1.00f)))
@@ -553,10 +517,9 @@ public static class EventRenderer
                 }
             }
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(lsAvail ? $"/li {ev.LifestreamCode}" : "Lifestream is not installed — click for details");
+                ImGui.SetTooltip(lsAvail ? $"/li {ev.LifestreamCode}" : "Lifestream is not installed, click for details");
         }
 
-        // Flag button (FFXIVenue only)
         if (ev.Source == EventSource.FFXIVenue)
         {
             ImGui.SameLine(0, 4);
@@ -576,8 +539,6 @@ public static class EventRenderer
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Report this venue");
         }
     }
-
-    // Flag popup
 
     public static void OpenFlagPopup(string eventId)
     {
@@ -624,7 +585,7 @@ public static class EventRenderer
         if (_flagStatus == "ok")
         {
             using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.20f, 0.86f, 0.42f, 1f)))
-                ImGui.TextUnformatted("Report submitted — thank you!");
+                ImGui.TextUnformatted("Report submitted, thank you!");
             ImGui.Spacing();
             if (ImGui.Button("  Close  ##flagclose")) ImGui.CloseCurrentPopup();
         }
@@ -669,8 +630,6 @@ public static class EventRenderer
         ImGui.Spacing();
         ImGui.EndPopup();
     }
-
-    // Helpers
 
     private static void Dot()
     {

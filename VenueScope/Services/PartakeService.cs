@@ -13,20 +13,14 @@ using VenueScope.Models;
 
 namespace VenueScope.Services;
 
-/// <summary>
-/// Fetches FFXIV events from Partake.gg via the official GraphQL API.
-/// Uses pagination (100 per page) to retrieve ALL events.
-/// DC and server data is read from Lumina (live game data).
-/// </summary>
 public class PartakeService : IDisposable
 {
     private readonly GraphQLHttpClient _graphQL;
     private readonly IPluginLog        _log;
 
-    // Region index matches PartyVerseApi.RegionList order (1=Japan, 2=NA, 3=Europe, 4=Oceania)
+    // 1=Japan, 2=NA, 3=Europe, 4=Oceania
     public static readonly List<string> RegionList = ["Unknown", "Japan", "North America", "Europe", "Oceania"];
 
-    // Loaded from Lumina on construction
     public readonly Dictionary<int, DataCenterInfo> DataCenters = new();
     public readonly Dictionary<int, ServerInfo>     Servers     = new();
 
@@ -45,7 +39,6 @@ public class PartakeService : IDisposable
         _graphQL = new GraphQLHttpClient("https://api.partake.gg/", new NewtonsoftJsonSerializer());
         _graphQL.HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"Dalamud-VenueScope/{version}");
 
-        // Load DC and server list from Lumina (same method as PartyPlanner)
         LoadLuminaData(dataManager);
     }
 
@@ -57,7 +50,7 @@ public class PartakeService : IDisposable
             foreach (var wg in worldGroups)
             {
                 var name = wg.Name.ExtractText();
-                // Skip dev/cloud/unused DCs
+                // region 7 = cloud/dev DCs
                 if (name != "Dev" && name != "Shadow" && wg.Region != 7)
                     DataCenters[(int)wg.RowId] = new DataCenterInfo((int)wg.RowId, name, wg.Region);
             }
@@ -76,12 +69,10 @@ public class PartakeService : IDisposable
         _log.Debug($"[Partake] Loaded {DataCenters.Count} data centers and {Servers.Count} servers from Lumina.");
     }
 
-    /// <summary>Fetches all upcoming events (paginated).</summary>
     public async Task<List<VenueEvent>> FetchAllEventsAsync()
     {
         var result = new List<VenueEvent>();
 
-        // 1. Active events (currently ongoing)
         int page = 0;
         bool more = true;
         while (more)
@@ -100,7 +91,6 @@ public class PartakeService : IDisposable
             }
         }
 
-        // 2. Upcoming events
         page = 0;
         more = true;
         while (more)
@@ -119,7 +109,7 @@ public class PartakeService : IDisposable
             }
         }
 
-        // Deduplicate: active events are a subset of all events — same ID can appear twice
+        // active events are a subset of upcoming, deduplicate
         var before = result.Count;
         var deduped = result.DistinctBy(e => e.Id).ToList();
         _log.Debug($"[Partake] Fetched {deduped.Count} events ({before - deduped.Count} duplicates removed).");
@@ -196,7 +186,6 @@ public class PartakeService : IDisposable
             var serverName = ev.LocationData?.Server?.Name ?? string.Empty;
             var dcName     = ev.LocationData?.DataCenter?.Name ?? string.Empty;
 
-            // Build full tag list: API tags + normalized ageRating
             var tags = new List<string>(ev.Tags);
             var ageTag = NormalizeAgeRating(ev.AgeRating);
             if (!string.IsNullOrEmpty(ageTag) && !tags.Contains(ageTag))
@@ -226,24 +215,16 @@ public class PartakeService : IDisposable
         return result;
     }
 
-    /// <summary>Converts Partake ageRating enum values to human-readable tags.</summary>
     private static string NormalizeAgeRating(string raw) => raw?.ToUpperInvariant() switch
     {
         "ALL_AGES" or "ALLAGES"  => "All Ages",
         "18_PLUS"  or "18PLUS"   => "18+",
         "MATURE"                 => "Mature",
         "MINORS_OK"              => "Minors OK",
-        _ when !string.IsNullOrEmpty(raw) => raw, // unknown value: pass through as-is
+        _ when !string.IsNullOrEmpty(raw) => raw,
         _                        => string.Empty,
     };
 
-    /// <summary>
-    /// Sanitizes a title for ImGui display:
-    ///   - Maps fullwidth ASCII (ＡＢＣ) → regular ASCII (ABC)
-    ///   - Maps mathematical Unicode letters (𝒜𝓑𝕮 etc.) → ASCII equivalents
-    ///   - Keeps all other BMP characters (accented Latin, CJK, symbols…)
-    ///   - Drops unmappable supplementary-plane characters (emoji, unknown symbols)
-    /// </summary>
     private static string SanitizeTitle(string s)
     {
         if (string.IsNullOrEmpty(s)) return s;
@@ -253,40 +234,30 @@ public class PartakeService : IDisposable
         {
             char c = s[i];
 
-            // Fullwidth ASCII (U+FF01–U+FF5E) → regular ASCII (U+0021–U+007E)
-            if (c >= '\uFF01' && c <= '\uFF5E')
+            if (c >= '\uFF01' && c <= '\uFF5E') // fullwidth ASCII → regular ASCII
             {
                 sb.Append((char)(c - 0xFF01 + 0x21));
                 continue;
             }
 
-            // Surrogate pair = supplementary-plane character (U+10000+)
             if (char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
             {
                 int cp = char.ConvertToUtf32(c, s[i + 1]);
-                i++; // consume low surrogate
+                i++;
                 char? mapped = MathLetterToAscii(cp);
                 if (mapped.HasValue)
                     sb.Append(mapped.Value);
-                // else: discard (emoji, unknown supplementary character)
                 continue;
             }
 
-            // BMP character — keep as-is
             sb.Append(c);
         }
 
         return sb.ToString().Trim();
     }
 
-    /// <summary>
-    /// Maps a codepoint in the Mathematical Alphanumeric Symbols block
-    /// (U+1D400–U+1D7FF) to its ASCII equivalent letter or digit.
-    /// Returns null for codepoints outside that block.
-    /// </summary>
     private static char? MathLetterToAscii(int cp)
     {
-        // Uppercase base codepoints (where 'A' lives) for each math style
         ReadOnlySpan<int> upperBases =
         [
             0x1D400, // Bold
@@ -304,7 +275,6 @@ public class PartakeService : IDisposable
             0x1D670, // Monospace
         ];
 
-        // Lowercase base codepoints (where 'a' lives) — base + 26 within each 52-char block
         ReadOnlySpan<int> lowerBases =
         [
             0x1D41A, // Bold
@@ -333,7 +303,6 @@ public class PartakeService : IDisposable
             if ((uint)off < 26u) return (char)('a' + off);
         }
 
-        // Mathematical digit styles (bold, double-struck, sans, sans-bold, monospace)
         ReadOnlySpan<int> digitBases = [0x1D7CE, 0x1D7D8, 0x1D7E2, 0x1D7EC, 0x1D7F6];
         foreach (int b in digitBases)
         {
@@ -344,13 +313,6 @@ public class PartakeService : IDisposable
         return null;
     }
 
-    // ── Lifestream code normalization ─────────────────────────────────────────
-
-    /// <summary>
-    /// Tries to correct the server name in a free-text Lifestream location string.
-    /// Priority: use the validated server name from locationData (Partake dropdown).
-    /// Fallback: fuzzy-match the first token against the Lumina server list.
-    /// </summary>
     private string NormalizeLifestreamCode(string raw, string serverNameFromApi)
     {
         if (string.IsNullOrWhiteSpace(raw)) return raw;
@@ -366,30 +328,25 @@ public class PartakeService : IDisposable
 
             if (dist == 0)
             {
-                // Already correct server at start — just clean up the tail
                 result = string.IsNullOrEmpty(tail) ? first : $"{first} {tail}";
             }
             else if (dist <= 2)
             {
-                // Typo at start — replace with correct spelling
                 result = string.IsNullOrEmpty(tail)
                     ? serverNameFromApi
                     : $"{serverNameFromApi} {tail}";
             }
             else
             {
-                // First token doesn't match the authoritative server name.
                 bool firstIsAnyServer = Servers.Values
                     .Any(s => Levenshtein(firstLower, s.Name.ToLowerInvariant()) <= 1);
 
                 if (firstIsAnyServer)
                 {
-                    // Looks like a valid (different) server — keep it, just clean up
                     result = string.IsNullOrEmpty(tail) ? first : $"{first} {tail}";
                 }
                 else
                 {
-                    // Check if the server name is hiding at the end of the tail
                     string tailLower = tail.ToLowerInvariant();
                     var (_, __, lastPart) = SplitLastToken(tail);
                     bool tailEndsWithServer = !string.IsNullOrEmpty(lastPart) &&
@@ -397,7 +354,7 @@ public class PartakeService : IDisposable
 
                     if (tailEndsWithServer)
                     {
-                        // e.g. "Goblet W8 P12 | Mateus" — reorder to "Mateus Goblet W8 P12"
+                        // e.g. "Goblet W8 P12 | Mateus" → "Mateus Goblet W8 P12"
                         string locationPart = StripTrailingServer(tail, lastPart);
                         result = string.IsNullOrEmpty(locationPart)
                             ? $"{serverNameFromApi} {first}"
@@ -405,7 +362,6 @@ public class PartakeService : IDisposable
                     }
                     else
                     {
-                        // No server found anywhere — prepend it
                         result = string.IsNullOrEmpty(tail)
                             ? $"{serverNameFromApi} {first}"
                             : $"{serverNameFromApi} {first} {tail}";
@@ -415,7 +371,6 @@ public class PartakeService : IDisposable
         }
         else
         {
-            // No authoritative name — fuzzy match the first token
             var best = Servers.Values
                 .Select(s => (s.Name, Dist: Levenshtein(firstLower, s.Name.ToLowerInvariant())))
                 .Where(x => x.Dist <= 2)
@@ -433,10 +388,8 @@ public class PartakeService : IDisposable
         return CleanLifestreamCode(result);
     }
 
-    /// <summary>Removes stray / and | characters left over after normalization.</summary>
     private static string CleanLifestreamCode(string s)
     {
-        // Normalize known housing district name variants to what Lifestream expects
         var ri = System.Text.RegularExpressions.RegexOptions.IgnoreCase;
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bLavender Beds?\b",  "Lavender Beds",  ri);
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bMists?\b",           "Mist",           ri);
@@ -445,12 +398,11 @@ public class PartakeService : IDisposable
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bEmpyreum\b",         "Empyreum",       ri);
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bShirogane\b",        "Shirogane",      ri);
 
-        // Expand concatenated ward+plot (W7P5 → W7 P5) before other cleanup
+        // expand concatenated ward+plot: W7P5 → W7 P5
         s = System.Text.RegularExpressions.Regex.Replace(
             s, @"\bW(\d+)P(\d+)\b", "W$1 P$2",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-        // Replace separator characters with a space, then collapse runs of whitespace
         var sb = new StringBuilder(s.Length);
         bool lastWasSpace = false;
         foreach (char c in s)
@@ -472,7 +424,6 @@ public class PartakeService : IDisposable
         return sb.ToString().Trim();
     }
 
-    /// <summary>Splits off the last token from a string using the same separator set.</summary>
     private static (string head, string sep, string last) SplitLastToken(string s)
     {
         foreach (var sep in new[] { " | ", " / ", " - ", " \u2013 ", ", " })
@@ -484,7 +435,6 @@ public class PartakeService : IDisposable
         return sp >= 0 ? (s[..sp].Trim(), " ", s[(sp + 1)..].Trim()) : ("", "", s);
     }
 
-    /// <summary>Removes the trailing server token from a location string.</summary>
     private static string StripTrailingServer(string tail, string serverToken)
     {
         int idx = tail.LastIndexOf(serverToken, StringComparison.OrdinalIgnoreCase);
@@ -525,6 +475,5 @@ public class PartakeService : IDisposable
     public void Dispose() => _graphQL.Dispose();
 }
 
-// Lumina-derived info types
 public record DataCenterInfo(int Id, string Name, int Region);
 public record ServerInfo(int Id, string Name, int DataCenterId);

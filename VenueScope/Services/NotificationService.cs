@@ -7,7 +7,6 @@ using VenueScope.Models;
 
 namespace VenueScope.Services;
 
-/// <summary>Listens for new events from the cache and sends Dalamud notifications.</summary>
 public class NotificationService : IDisposable
 {
     private readonly EventCacheService    _cache;

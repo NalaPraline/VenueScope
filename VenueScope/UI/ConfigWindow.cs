@@ -26,7 +26,7 @@ public sealed class ConfigWindow : Window, IDisposable
     private static readonly Vector4 ColOrange   = new(1.00f, 0.68f, 0.14f, 1f);
 
     public ConfigWindow(Configuration config, PartakeService partake, EventCacheService cache)
-        : base("VenueScope — Settings##cfg", ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoScrollbar)
+        : base("VenueScope Settings##cfg", ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoScrollbar)
     {
         _config  = config;
         _partake = partake;
@@ -56,8 +56,6 @@ public sealed class ConfigWindow : Window, IDisposable
         DrawSectionAbout();
     }
 
-    // ══ Sources ═══════════════════════════════════════════════════════════
-
     private void DrawSectionSources()
     {
         if (!SectionHeader("  Sources")) return;
@@ -71,7 +69,7 @@ public sealed class ConfigWindow : Window, IDisposable
             Task.Run(_cache.RefreshNowAsync);
         }
         ImGui.SameLine(0, 8);
-        ImGui.TextColored(ColSubtitle, "— upcoming community events");
+        ImGui.TextColored(ColSubtitle, "upcoming community events");
 
         var showF = _config.ShowFFXIVenueEvents;
         if (ImGui.Checkbox("FFXIV Venues", ref showF) && showF != _config.ShowFFXIVenueEvents)
@@ -81,12 +79,10 @@ public sealed class ConfigWindow : Window, IDisposable
             Task.Run(_cache.RefreshNowAsync);
         }
         ImGui.SameLine(0, 8);
-        ImGui.TextColored(ColSubtitle, "— recurring venue openings");
+        ImGui.TextColored(ColSubtitle, "recurring venue openings");
 
         ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }
-
-    // ══ Refresh ════════════════════════════════════════════════════════════
 
     private void DrawSectionRefresh()
     {
@@ -139,8 +135,6 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }
 
-    // ══ Notifications ══════════════════════════════════════════════════════
-
     private void DrawSectionNotifications()
     {
         if (!SectionHeader("  Notifications")) return;
@@ -191,8 +185,6 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }
 
-    // ══ Display ════════════════════════════════════════════════════════════
-
     private void DrawSectionDisplay()
     {
         if (!SectionHeader("  Display")) return;
@@ -203,7 +195,7 @@ public sealed class ConfigWindow : Window, IDisposable
         {
             _config.HideEndedEvents = hideEnded;
             _config.Save();
-            _cache.TagsByDc.Clear(); // Rebuild tag lists without ended events
+            _cache.TagsByDc.Clear();
         }
 
         ImGui.Spacing();
@@ -225,8 +217,6 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }
 
-    // ══ Integrations ═══════════════════════════════════════════════════════
-
     private static void DrawSectionIntegrations()
     {
         if (!SectionHeader("  Integrations")) return;
@@ -235,8 +225,8 @@ public sealed class ConfigWindow : Window, IDisposable
         bool lifestreamAvail = Plugin.IsLifestreamAvailable();
         var  statusColor     = lifestreamAvail ? ColGreen : ColRed;
         var  statusLabel     = lifestreamAvail
-            ? "Lifestream — installed"
-            : "Lifestream — not installed";
+            ? "Lifestream installed"
+            : "Lifestream not installed";
         var  statusHint = lifestreamAvail
             ? "Teleport buttons will use Lifestream to travel directly to venue locations."
             : "Install Lifestream from the Dalamud plugin installer to enable in-game teleport buttons.";
@@ -248,8 +238,6 @@ public sealed class ConfigWindow : Window, IDisposable
 
         ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }
-
-    // ══ About ══════════════════════════════════════════════════════════════
 
     private void DrawSectionAbout()
     {
@@ -282,8 +270,6 @@ public sealed class ConfigWindow : Window, IDisposable
 
         ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }
-
-    // ══ Hidden Venues ══════════════════════════════════════════════════════
 
     private void DrawSectionHiddenVenues()
     {
@@ -331,9 +317,6 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }
 
-    // ══ Helpers ════════════════════════════════════════════════════════════
-
-    /// <summary>Draws a colored collapsing header. Returns true if the section is open.</summary>
     private static bool SectionHeader(string label)
     {
         using var col  = ImRaii.PushColor(ImGuiCol.Header,        new Vector4(0.14f, 0.18f, 0.28f, 1f));

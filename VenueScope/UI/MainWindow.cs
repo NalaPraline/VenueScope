@@ -34,14 +34,12 @@ public sealed class MainWindow : Window, IDisposable
     private DateTime _lastSeenRefresh = DateTime.MinValue;
     private bool     _favoritesOnly   = false;
 
-    // ── Hide banner ───────────────────────────────────────────────────────────
     private string   _hideBannerName  = string.Empty;
     private DateTime _hideBannerUntil = DateTime.MinValue;
     private const float HideBannerDuration = 6f; // seconds
 
     private enum TimeFilter { All = 0, LiveNow = 1, Today = 2, Upcoming = 3 }
 
-    // ── Palette ───────────────────────────────────────────────────────────────
     private static readonly Vector4 ColPartake   = new(0.33f, 0.58f, 0.96f, 1f);
     private static readonly Vector4 ColFFXIVenue = new(0.62f, 0.32f, 0.92f, 1f);
     private static readonly Vector4 ColAccent    = new(0.40f, 0.65f, 1.00f, 1f);
@@ -95,7 +93,6 @@ public sealed class MainWindow : Window, IDisposable
             _ => null,
         };
 
-        // Restore last DC selection (multi); fall back to legacy single if needed
         _selectedDcKeys = new HashSet<string>(_config.SelectedDataCenters);
         if (_selectedDcKeys.Count == 0 && !string.IsNullOrEmpty(_config.SelectedDataCenter))
             _selectedDcKeys.Add(_config.SelectedDataCenter);
@@ -111,8 +108,6 @@ public sealed class MainWindow : Window, IDisposable
 
         DrawTopBar();
         ImGui.Separator();
-
-        // ── Left sidebar (darker background, no scroll) ───────────────────────
         {
             using var color   = ImRaii.PushColor(ImGuiCol.ChildBg, ColSidebarBg);
             using var sidebar = ImRaii.Child("##sidebar", new Vector2(SidebarW * gs, 0f), false,
@@ -122,19 +117,14 @@ public sealed class MainWindow : Window, IDisposable
 
         ImGui.SameLine(0, 0);
 
-        // Vertical divider
         var lp0 = ImGui.GetCursorScreenPos();
         ImGui.GetWindowDrawList().AddLine(
             lp0, lp0 + new Vector2(0f, ImGui.GetContentRegionAvail().Y),
             ImGui.ColorConvertFloat4ToU32(ColDivider), 1f);
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 1f);
-
-        // ── Main content ──────────────────────────────────────────────────────
         using var main = ImRaii.Child("##maincontent", Vector2.Zero, false);
         if (main.Success) DrawMainContent();
     }
-
-    // ══ Top Bar ══════════════════════════════════════════════════════════════
 
     private void DrawTopBar()
     {
@@ -144,7 +134,7 @@ public sealed class MainWindow : Window, IDisposable
 
         ImGui.TextColored(ColAccent, "VenueScope");
         ImGui.SameLine(0, 8);
-        ImGui.TextColored(ColDivider, "—");
+        ImGui.TextColored(ColDivider, "|");
         ImGui.SameLine(0, 8);
 
         DrawDcCombo();
@@ -162,7 +152,6 @@ public sealed class MainWindow : Window, IDisposable
             if (ImGui.SmallButton("x##clrsearch")) _searchText = string.Empty;
         }
 
-        // Right side
         float btnReloadW   = ImGui.CalcTextSize("  Reload  ").X  + ImGui.GetStyle().FramePadding.X * 2;
         float btnSettingsW = ImGui.CalcTextSize("  Settings  ").X + ImGui.GetStyle().FramePadding.X * 2;
         float statusW      = 120f * gs;
@@ -219,7 +208,6 @@ public sealed class MainWindow : Window, IDisposable
         {
             if (!ImGui.BeginCombo("##dccombo", DcComboLabel)) return;
 
-            // "All" clears selection — DontClosePopups keeps the dropdown open
             bool allSel = _selectedDcKeys.Count == 0;
             if (ImGui.Selectable(allSel ? "[x] All Data Centers" : "[ ] All Data Centers",
                     allSel, ImGuiSelectableFlags.DontClosePopups))
@@ -275,16 +263,12 @@ public sealed class MainWindow : Window, IDisposable
         _config.Save();
     }
 
-    // ══ Sidebar ══════════════════════════════════════════════════════════════
-
     private void DrawSidebar()
     {
         float gs = ImGuiHelpers.GlobalScale;
         float w  = ImGui.GetContentRegionAvail().X;
 
         ImGui.Spacing();
-
-        // ── BROWSE ────────────────────────────────────────────────────────────
         DrawSidebarLabel("BROWSE");
         DrawSidebarTimeItem("● Live Now", TimeFilter.LiveNow,  ColTimeLive);
         DrawSidebarTimeItem("Today",      TimeFilter.Today,    ColTimeToday);
@@ -294,8 +278,6 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
         DrawSidebarRule();
         ImGui.Spacing();
-
-        // ── SOURCE ────────────────────────────────────────────────────────────
         DrawSidebarLabel("SOURCE");
         DrawSidebarSourceItem("All Sources",    null,                  ColAccent);
         DrawSidebarSourceItem("Partake.gg",     EventSource.Partake,   ColPartake);
@@ -304,8 +286,6 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
         DrawSidebarRule();
         ImGui.Spacing();
-
-        // ── FAVORITES ─────────────────────────────────────────────────────────
         DrawSidebarLabel("FAVORITES");
         bool prevFavoritesOnly = _favoritesOnly;
         DrawSidebarToggleItem("\u2605 Favorites", ref _favoritesOnly, new Vector4(1.00f, 0.82f, 0.14f, 1f));
@@ -319,8 +299,6 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
         DrawSidebarRule();
         ImGui.Spacing();
-
-        // ── TAGS ──────────────────────────────────────────────────────────────
         DrawSidebarLabel("TAGS");
         ImGui.Spacing();
         DrawSidebarTags(w);
@@ -452,7 +430,6 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.Spacing();
         }
 
-        // Scrollable tag area (takes remaining sidebar height)
         float tagAreaH = ImGui.GetContentRegionAvail().Y - 4f * gs;
         using var tagChild = ImRaii.Child("##tagslist", new Vector2(0f, tagAreaH), false);
         if (!tagChild.Success) return;
@@ -484,8 +461,6 @@ public sealed class MainWindow : Window, IDisposable
         }
     }
 
-    // ══ Hide Banner ═══════════════════════════════════════════════════════════
-
     private void DrawHideBanner()
     {
         if (DateTime.Now >= _hideBannerUntil || string.IsNullOrEmpty(_hideBannerName))
@@ -505,7 +480,6 @@ public sealed class MainWindow : Window, IDisposable
 
         var br = tl + new Vector2(w, cardH);
 
-        // Card background + left accent bar
         dl.AddRectFilled(tl, br,
             ImGui.ColorConvertFloat4ToU32(new Vector4(0.13f, 0.10f, 0.07f, 0.96f)), 5f * gs);
         dl.AddRectFilled(
@@ -513,7 +487,6 @@ public sealed class MainWindow : Window, IDisposable
             new Vector2(tl.X + 3f * gs, br.Y - 4f * gs),
             ImGui.ColorConvertFloat4ToU32(new Vector4(1.00f, 0.55f, 0.12f, 0.90f)), 2f);
 
-        // Progress bar at bottom (drains left to right as time passes)
         dl.AddRectFilled(
             new Vector2(tl.X, br.Y - 3f * gs), br,
             ImGui.ColorConvertFloat4ToU32(new Vector4(0.25f, 0.18f, 0.06f, 1.00f)));
@@ -522,17 +495,14 @@ public sealed class MainWindow : Window, IDisposable
             new Vector2(tl.X + w * progress, br.Y),
             ImGui.ColorConvertFloat4ToU32(new Vector4(1.00f, 0.62f, 0.18f, 0.75f)));
 
-        // Line 1: venue name
         ImGui.SetCursorScreenPos(tl + new Vector2(padX, padY));
         using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(1.00f, 0.72f, 0.30f, 1f)))
             ImGui.TextUnformatted($"\"{_hideBannerName}\" is now hidden");
 
-        // Line 2: hint
         ImGui.SetCursorScreenPos(tl + new Vector2(padX, padY + lineH + 4f * gs));
         using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.60f, 0.60f, 0.68f, 1f)))
             ImGui.TextUnformatted("Their events won't appear anymore. To unhide, open");
 
-        // "Settings" inline link
         ImGui.SameLine(0, 4);
         using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(1.00f, 0.72f, 0.30f, 1f)))
         {
@@ -549,12 +519,9 @@ public sealed class MainWindow : Window, IDisposable
         using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.60f, 0.60f, 0.68f, 1f)))
             ImGui.TextUnformatted("→ Hidden Venues.");
 
-        // Advance cursor past the card + spacing
         ImGui.SetCursorScreenPos(new Vector2(tl.X, br.Y));
         ImGui.Dummy(new Vector2(w, 6f * gs));
     }
-
-    // ══ Main Content ══════════════════════════════════════════════════════════
 
     private void DrawMainContent()
     {
@@ -594,8 +561,6 @@ public sealed class MainWindow : Window, IDisposable
         var tagFiltered  = _filterCache.GetFiltered(cacheKey, baseEvents, selectedTags);
         var timeFiltered = ApplyTimeFilter(tagFiltered);
         var searched     = ApplySearch(timeFiltered);
-
-        // ── Summary ───────────────────────────────────────────────────────────
         ImGui.Spacing();
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 8f * gs);
 
@@ -627,8 +592,6 @@ public sealed class MainWindow : Window, IDisposable
                     : "No events match the current filters.");
             return;
         }
-
-        // ── Event list with virtual scrolling ────────────────────────────────────
         using var child = ImRaii.Child("##evlist", Vector2.Zero, false);
         if (!child.Success) return;
 
@@ -646,14 +609,12 @@ public sealed class MainWindow : Window, IDisposable
         float visBot   = scrollY + windowH;
         float fallback = 80f * gs; // estimated height for cards not yet measured
 
-        // Build cumulative Y positions from cached heights
         var cumY = new float[searched.Count + 1];
         for (int i = 0; i < searched.Count; i++)
             cumY[i + 1] = cumY[i] + _cardHeightCache.GetValueOrDefault(searched[i].Id, fallback);
 
         float totalH = cumY[searched.Count];
 
-        // Determine the visible range
         int first = searched.Count;
         int last  = -1;
         for (int i = 0; i < searched.Count; i++)
@@ -662,11 +623,9 @@ public sealed class MainWindow : Window, IDisposable
             if (cumY[i]     <= visBot) last = i;
         }
 
-        // Top spacer — holds scroll position for items above the viewport
         if (first > 0)
             ImGui.Dummy(new Vector2(0f, cumY[first]));
 
-        // Draw only the visible cards
         if (first <= last)
         {
             for (int i = first; i <= last; i++)
@@ -681,7 +640,6 @@ public sealed class MainWindow : Window, IDisposable
             }
         }
 
-        // Bottom spacer — maintains total scroll height for items below the viewport
         if (last < searched.Count - 1)
         {
             float remaining = totalH - (last >= 0 ? cumY[last + 1] : 0f);
@@ -690,15 +648,12 @@ public sealed class MainWindow : Window, IDisposable
         }
     }
 
-    // ══ Favorites Grouped View ════════════════════════════════════════════════
-
     private void DrawFavoritesGrouped()
     {
         float gs = ImGuiHelpers.GlobalScale;
 
         var favEvents = GetBaseEvents();
 
-        // Build groups from current cache events + populate venue info cache for new favorites
         bool cacheUpdated = false;
         var groups = favEvents
             .GroupBy(e => e.Source == EventSource.FFXIVenue
@@ -718,7 +673,6 @@ public sealed class MainWindow : Window, IDisposable
                     IconUrl    = !string.IsNullOrEmpty(first.TeamIconUrl) ? first.TeamIconUrl : first.BannerUrl,
                     Source     = first.Source,
                 };
-                // Bootstrap cache for pre-existing favorites that don't have an entry yet
                 if (!_config.FavoriteVenueCache.ContainsKey(key))
                 {
                     _config.FavoriteVenueCache[key] = info;
@@ -730,12 +684,9 @@ public sealed class MainWindow : Window, IDisposable
 
         if (cacheUpdated) _config.Save();
 
-        // Apply source filter
         if (_sourceFilter != null)
             groups = groups.Where(g => g.Info.Source == _sourceFilter).ToList();
 
-        // Add favorites from persistent cache that have no events in the current cache
-        // Respect DC and source filters for cache-only entries
         var existingKeys = groups.Select(g => g.Key).ToHashSet();
         foreach (var (key, info) in _config.FavoriteVenueCache)
         {
@@ -774,7 +725,6 @@ public sealed class MainWindow : Window, IDisposable
         using var child = ImRaii.Child("##favlist", Vector2.Zero, false);
         if (!child.Success) return;
 
-        // Apply active sidebar tag filter
         string favCacheKey = BuildCacheKey();
         EnsureTagsBuilt(favCacheKey);
         if (_cache.TagsByDc.TryGetValue(favCacheKey, out var activeTags))
@@ -799,7 +749,6 @@ public sealed class MainWindow : Window, IDisposable
         var   srcColor  = info.Source == EventSource.Partake ? ColPartake : ColFFXIVenue;
         var   colCardBg = new Vector4(0.13f, 0.13f, 0.20f, 1.00f);
 
-        // Apply HideEndedEvents + time filter
         var utcNow = DateTime.UtcNow;
         var visibleEvents = (_config.HideEndedEvents
             ? events.Where(e => e.EndTime == null || e.EndTime.Value.ToUniversalTime() > utcNow)
@@ -809,13 +758,11 @@ public sealed class MainWindow : Window, IDisposable
         if (_timeFilter != TimeFilter.All)
             visibleEvents = ApplyTimeFilter(visibleEvents);
 
-        // Hide card entirely when a filter is active and produces no visible events
         bool anyFilterActive = _timeFilter != TimeFilter.All || _selectedDcKeys.Count > 0;
         if (anyFilterActive && visibleEvents.Count == 0) return false;
 
         bool anyLive = visibleEvents.Any(e => _stringCache.GetOrCompute(e).IsLive);
 
-        // Deduplicated tags across all events for this venue
         var folderTags = events.SelectMany(e => e.Tags).Distinct().ToList();
 
         float cardW  = ImGui.GetContentRegionAvail().X;
@@ -832,8 +779,6 @@ public sealed class MainWindow : Window, IDisposable
 
         ImGui.Dummy(new Vector2(0f, padY));
         ImGui.Indent(indent);
-
-        // ── Name + [● LIVE] + Unfollow ────────────────────────────────────────
         float spc        = ImGui.GetStyle().ItemSpacing.X;
         float unfollowW  = ImGui.CalcTextSize("\u2605 Unfollow").X + ImGui.GetStyle().FramePadding.X * 2f + spc;
         float liveBadgeW = anyLive ? (ImGui.CalcTextSize("\u25cf LIVE").X + spc * 2f) : 0f;
@@ -884,8 +829,6 @@ public sealed class MainWindow : Window, IDisposable
                 _filterCache.Clear();
             }
         }
-
-        // ── Tags (deduplicated, folder level) ──────────────────────────────────
         if (folderTags.Count > 0)
         {
             for (int i = 0; i < folderTags.Count; i++)
@@ -907,8 +850,6 @@ public sealed class MainWindow : Window, IDisposable
                 }
             }
         }
-
-        // ── Divider ────────────────────────────────────────────────────────────
         ImGui.Spacing();
         {
             var lp0 = ImGui.GetCursorScreenPos();
@@ -916,8 +857,6 @@ public sealed class MainWindow : Window, IDisposable
             dl.AddRectFilled(lp0, lp1, ImGui.ColorConvertFloat4ToU32(ColDivider with { W = 0.50f }));
             ImGui.Dummy(new Vector2(0f, 4f * gs));
         }
-
-        // ── Event rows ─────────────────────────────────────────────────────────
         if (visibleEvents.Count == 0)
         {
             using (ImRaii.PushColor(ImGuiCol.Text, ColSubtitle with { W = 0.45f }))
@@ -933,7 +872,6 @@ public sealed class MainWindow : Window, IDisposable
                 using (ImRaii.PushColor(ImGuiCol.Text, timeColor))
                     ImGui.TextUnformatted(cached.StartsAtLocal);
 
-                // Server · DC inline
                 var serverDcInline = !string.IsNullOrEmpty(info.Server) && !string.IsNullOrEmpty(info.DataCenter)
                     ? $"{info.Server} · {info.DataCenter}"
                     : !string.IsNullOrEmpty(info.DataCenter) ? info.DataCenter : info.Server;
@@ -957,7 +895,6 @@ public sealed class MainWindow : Window, IDisposable
                         ImGui.TextUnformatted(cached.Location);
                 }
 
-                // Partake event title after location
                 if (ev.Source == EventSource.Partake && !string.IsNullOrEmpty(ev.Title))
                 {
                     ImGui.SameLine(0, 6);
@@ -965,7 +902,6 @@ public sealed class MainWindow : Window, IDisposable
                         ImGui.TextUnformatted(ev.Title);
                 }
 
-                // Right-aligned Open / Teleport / Report buttons
                 float evRight = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
                 float evBtnW  = 0f;
                 if (!string.IsNullOrEmpty(ev.EventUrl))       evBtnW += 52f * gs + spc;
@@ -1020,8 +956,6 @@ public sealed class MainWindow : Window, IDisposable
 
         ImGui.Dummy(new Vector2(0f, padY));
         ImGui.Unindent(indent);
-
-        // ── Card background ────────────────────────────────────────────────────
         var cardBR = new Vector2(cardTL.X + cardW, ImGui.GetCursorScreenPos().Y);
         dl.ChannelsSetCurrent(0);
 
@@ -1033,8 +967,6 @@ public sealed class MainWindow : Window, IDisposable
             cardTL + new Vector2(0f, 4f * gs),
             new Vector2(cardTL.X + 3f * gs, cardBR.Y - 4f * gs),
             ImGui.ColorConvertFloat4ToU32(accentColor with { W = 0.90f }), 2f);
-
-        // ── Icon (team/venue image, or placeholder) ────────────────────────────
         var iTL = new Vector2(cardTL.X + padX, cardTL.Y + padY);
         var iBR = iTL + new Vector2(iconSz, iconSz);
 
@@ -1073,8 +1005,6 @@ public sealed class MainWindow : Window, IDisposable
         dl.ChannelsMerge();
         return true;
     }
-
-    // ══ Helpers ═══════════════════════════════════════════════════════════════
 
     private string BuildCacheKey()
     {
@@ -1139,8 +1069,6 @@ public sealed class MainWindow : Window, IDisposable
             events = _selectedDcKeys.SelectMany(dc =>
                 _cache.EventsByDc.GetValueOrDefault(dc) ?? Enumerable.Empty<VenueEvent>());
 
-        // Source filter is ignored when favorites-only is active
-        // (favorites can come from any source)
         if (_sourceFilter != null && !_favoritesOnly)
             events = events.Where(e => e.Source == _sourceFilter);
 
@@ -1150,7 +1078,6 @@ public sealed class MainWindow : Window, IDisposable
                     ? _config.FavoriteEventIds.Contains(e.Id)
                     : e.TeamId > 0 && _config.FavoritePartakeTeamIds.Contains(e.TeamId));
 
-        // Hidden venues filter — applies even in favorites view
         events = events.Where(e =>
             e.Source == EventSource.FFXIVenue
                 ? !_config.HiddenVenueIds.Contains(e.Id)
