@@ -17,7 +17,7 @@ namespace VenueScope.Helpers;
 /// accent bar, status dot, and right-aligned action buttons.
 /// </summary>
 public static class EventRenderer
-{TA 
+{
     // Palette
     private static readonly Vector4 ColPartake   = new(0.33f, 0.58f, 0.96f, 1f);
     private static readonly Vector4 ColFFXIVenue = new(0.62f, 0.32f, 0.92f, 1f);
