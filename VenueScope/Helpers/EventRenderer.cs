@@ -17,8 +17,8 @@ namespace VenueScope.Helpers;
 /// accent bar, status dot, and right-aligned action buttons.
 /// </summary>
 public static class EventRenderer
-{
-    // ── Palette ───────────────────────────────────────────────────────────────
+{TA 
+    // Palette
     private static readonly Vector4 ColPartake   = new(0.33f, 0.58f, 0.96f, 1f);
     private static readonly Vector4 ColFFXIVenue = new(0.62f, 0.32f, 0.92f, 1f);
 
@@ -42,7 +42,7 @@ public static class EventRenderer
     /// <summary>Invoked after a venue is hidden. Argument is the display name of the hidden venue.</summary>
     public static Action<string>? OnHideVenue;
 
-    // ── Flag popup state (one popup at a time) ────────────────────────────────
+    // Flag popup state (one popup at a time)
     private static string _flagVenueId  = string.Empty;
     private static int    _flagCategory = 0;
     private static string _flagDesc     = string.Empty;
@@ -53,7 +53,7 @@ public static class EventRenderer
         IconCache?.GetOrQueue(
             !string.IsNullOrEmpty(ev.TeamIconUrl) ? ev.TeamIconUrl : ev.BannerUrl);
 
-    // ── Tag color palette ─────────────────────────────────────────────────────
+    // Tag color palette
     private static readonly Vector4[] TagPalette =
     [
         new(0.96f, 0.45f, 0.45f, 1f), // coral
@@ -79,14 +79,15 @@ public static class EventRenderer
         }
     }
 
-    // ── Layout constants (unscaled) ───────────────────────────────────────────
+    // Layout constants (unscaled)
     private const float PadX    = 14f;
     private const float PadY    = 7f;
     private const float ThumbW  = 50f;
     private const float ThumbH  = 42f;
     private const float ThumbGap = 8f;
+    
 
-    // ── Public entry point ────────────────────────────────────────────────────
+    // Public entry point
 
     public static void DrawEventCard(VenueEvent ev, CachedEventStrings cached, Configuration config)
     {
@@ -118,7 +119,7 @@ public static class EventRenderer
 
         ImGui.Indent(indent);
 
-        // ── Rows ─────────────────────────────────────────────────────────────
+        // Rows
         DrawTitleRow(ev, cached, srcColor, config);
         DrawInfoRow(ev, cached, srcColor, statusColor);
         if (cached.Tags.Length > 0)
@@ -129,7 +130,7 @@ public static class EventRenderer
         ImGui.Dummy(new Vector2(0f, padY));
         ImGui.Unindent(indent);
 
-        // ── Background layer ─────────────────────────────────────────────────
+        // Background layer
         var cardBR = new Vector2(cardTL.X + cardW, ImGui.GetCursorScreenPos().Y);
 
         dl.ChannelsSetCurrent(0);
@@ -194,7 +195,7 @@ public static class EventRenderer
         DrawFlagPopup();
     }
 
-    // ── Rows ─────────────────────────────────────────────────────────────────
+    // Rows
 
     private static void DrawTitleRow(VenueEvent ev, CachedEventStrings cached, Vector4 srcColor, Configuration config)
     {
@@ -377,7 +378,7 @@ public static class EventRenderer
         return text.Trim();
     }
 
-    // ── Actions ───────────────────────────────────────────────────────────────
+    // Actions
 
     private static readonly Vector4 ColFavOn  = new(1.00f, 0.82f, 0.14f, 1f);
     private static readonly Vector4 ColFavOff = new(0.44f, 0.44f, 0.52f, 1f);
@@ -401,7 +402,7 @@ public static class EventRenderer
         float rightEdge = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
         ImGui.SameLine(rightEdge - reservedW);
 
-        // ── Favorite toggle ───────────────────────────────────────────────────
+        // Favorite toggle
         bool isFav = ev.Source == EventSource.Partake
             ? ev.TeamId > 0 && config.FavoritePartakeTeamIds.Contains(ev.TeamId)
             : config.FavoriteEventIds.Contains(ev.Id);
@@ -466,7 +467,7 @@ public static class EventRenderer
             ImGui.SetTooltip(favTooltip);
         ImGui.SameLine(0, 4);
 
-        // ── Hide button ───────────────────────────────────────────────────────
+        // Hide button
         using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.25f, 0.12f, 0.12f, 0.60f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.45f, 0.18f, 0.18f, 0.85f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.60f, 0.22f, 0.22f, 1.00f)))
@@ -555,7 +556,7 @@ public static class EventRenderer
                 ImGui.SetTooltip(lsAvail ? $"/li {ev.LifestreamCode}" : "Lifestream is not installed — click for details");
         }
 
-        // ── Flag button (FFXIVenue only) ──────────────────────────────────────
+        // Flag button (FFXIVenue only)
         if (ev.Source == EventSource.FFXIVenue)
         {
             ImGui.SameLine(0, 4);
@@ -576,7 +577,7 @@ public static class EventRenderer
         }
     }
 
-    // ── Flag popup ────────────────────────────────────────────────────────────
+    // Flag popup
 
     public static void OpenFlagPopup(string eventId)
     {
@@ -669,7 +670,7 @@ public static class EventRenderer
         ImGui.EndPopup();
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers
 
     private static void Dot()
     {

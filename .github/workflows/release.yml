@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Add hide venue button to remove venues from the event list."
+          changelog: "Clean up comment formatting and notification titles."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

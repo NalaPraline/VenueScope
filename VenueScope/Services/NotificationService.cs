@@ -39,7 +39,7 @@ public class NotificationService : IDisposable
         const int MaxSingle = 3;
         if (list.Count > MaxSingle)
         {
-            Notify("VenueScope — New Events", $"{list.Count} new events available! Open /vs to browse.");
+            Notify("VenueScope New Events", $"{list.Count} new events available! Open /vs to browse.");
             return;
         }
 
@@ -47,7 +47,7 @@ public class NotificationService : IDisposable
         {
             var where = string.IsNullOrEmpty(ev.Server) ? ev.DataCenter : $"{ev.Server} ({ev.DataCenter})";
             var time  = ev.StartTime.ToLocalTime().ToString("HH:mm");
-            Notify($"VenueScope — {ev.Title}", $"Hosted by {ev.Host} on {where} at {time}");
+            Notify($"VenueScope {ev.Title}", $"Hosted by {ev.Host} on {where} at {time}");
         }
     }
 
