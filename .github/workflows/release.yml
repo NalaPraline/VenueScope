@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Add website, Instagram and Discord links for venues. Fix location display with Unicode styled text. Improve description separators."
+          changelog: "Fix location display by removing decorative symbols (hearts, stars, emoji, etc.) that break address parsing."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

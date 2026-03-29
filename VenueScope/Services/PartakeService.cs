@@ -182,7 +182,7 @@ public class PartakeService : IDisposable
         {
             var title       = SanitizeTitle(ev.Title       ?? string.Empty);
             var description = SanitizeTitle(ev.Description ?? string.Empty);
-            var location    = SanitizeTitle(ev.Location    ?? string.Empty);
+            var location    = StripDecorative(SanitizeTitle(ev.Location ?? string.Empty));
 
             var serverName = ev.LocationData?.Server?.Name ?? string.Empty;
             var dcName     = ev.LocationData?.DataCenter?.Name ?? string.Empty;
@@ -217,6 +217,19 @@ public class PartakeService : IDisposable
             });
         }
         return result;
+    }
+
+    private static string StripDecorative(string s)
+    {
+        var sb = new System.Text.StringBuilder(s.Length);
+        foreach (char c in s)
+        {
+            if (char.IsLetterOrDigit(c) || char.IsWhiteSpace(c) || "|-/,.()".IndexOf(c) >= 0)
+                sb.Append(c);
+            else
+                sb.Append(' ');
+        }
+        return System.Text.RegularExpressions.Regex.Replace(sb.ToString().Trim(), @" {2,}", " ");
     }
 
     private static string NormalizeAgeRating(string raw) => raw?.ToUpperInvariant() switch
