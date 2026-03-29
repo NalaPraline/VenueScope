@@ -355,7 +355,7 @@ public static class EventRenderer
         float spc = ImGui.GetStyle().ItemSpacing.X;
         float w   = 32f * gs + spc;
         w += 52f * gs + spc;
-        if (!string.IsNullOrEmpty(ev.EventUrl))       w += 52f * gs + spc;
+        if (!string.IsNullOrEmpty(ev.EventUrl) || !string.IsNullOrEmpty(ev.DiscordUrl)) w += 52f * gs + spc;
         if (!string.IsNullOrEmpty(ev.LifestreamCode)) w += 90f * gs + spc;
         if (ev.Source == EventSource.FFXIVenue)       w += 32f * gs + spc;
         return w;
@@ -481,16 +481,34 @@ public static class EventRenderer
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Hide this venue");
         ImGui.SameLine(0, 4);
 
-        if (!string.IsNullOrEmpty(ev.EventUrl))
+        if (!string.IsNullOrEmpty(ev.EventUrl) || !string.IsNullOrEmpty(ev.DiscordUrl))
         {
             using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.16f, 0.30f, 0.54f, 0.65f));
             using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.22f, 0.42f, 0.72f, 0.90f));
             using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.28f, 0.52f, 0.88f, 1.00f));
             using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.72f, 0.86f, 1.00f, 1.00f));
-            if (ImGui.SmallButton($" Open ##{ev.Id}"))
-                Util.OpenLink(ev.EventUrl);
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Open event page");
+            if (ImGui.SmallButton($" Links ##{ev.Id}links"))
+                ImGui.OpenPopup($"##links{ev.Id}");
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Open links");
             ImGui.SameLine(0, 4);
+
+            using (ImRaii.PushColor(ImGuiCol.PopupBg, new Vector4(0.11f, 0.11f, 0.18f, 1f)))
+            if (ImGui.BeginPopup($"##links{ev.Id}"))
+            {
+                if (!string.IsNullOrEmpty(ev.EventUrl))
+                {
+                    using var t1 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.72f, 0.86f, 1.00f, 1.00f));
+                    if (ImGui.MenuItem($"Open website##{ev.Id}lw"))
+                        Util.OpenLink(ev.EventUrl);
+                }
+                if (!string.IsNullOrEmpty(ev.DiscordUrl))
+                {
+                    using var t2 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.76f, 0.80f, 1.00f, 1.00f));
+                    if (ImGui.MenuItem($"Discord server##{ev.Id}ld"))
+                        Util.OpenLink(ev.DiscordUrl);
+                }
+                ImGui.EndPopup();
+            }
         }
 
         if (!string.IsNullOrEmpty(ev.LifestreamCode))

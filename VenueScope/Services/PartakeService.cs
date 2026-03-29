@@ -126,7 +126,7 @@ public class PartakeService : IDisposable
                     id, title, locationId, ageRating, attendeeCount,
                     startsAt, endsAt, location, tags,
                     description(type: PLAIN_TEXT)
-                    team {{ id name iconUrl }}
+                    team {{ id name iconUrl discordUrl }}
                     locationData {{
                         server {{ id name dataCenterId }}
                         dataCenter {{ id name }}
@@ -157,7 +157,7 @@ public class PartakeService : IDisposable
                     id, title, locationId, ageRating, attendeeCount,
                     startsAt, endsAt, location, tags,
                     description(type: PLAIN_TEXT)
-                    team {{ id name iconUrl }}
+                    team {{ id name iconUrl discordUrl }}
                     locationData {{
                         server {{ id name dataCenterId }}
                         dataCenter {{ id name }}
@@ -205,6 +205,7 @@ public class PartakeService : IDisposable
                 LifestreamCode   = NormalizeLifestreamCode(ev.Location, serverName),
                 Tags             = tags,
                 EventUrl         = $"https://www.partake.gg/events/{ev.Id}",
+                DiscordUrl       = ev.Team?.DiscordUrl ?? string.Empty,
                 Source           = EventSource.Partake,
                 AttendeeCount    = ev.AttendeeCount,
                 TeamName         = ev.Team?.Name ?? string.Empty,

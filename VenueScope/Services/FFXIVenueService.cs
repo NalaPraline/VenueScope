@@ -69,8 +69,9 @@ public class FFXIVenueService : IDisposable
                 var server = locObj?["world"]?.ToString()      ?? string.Empty;
                 var locStr = BuildLocationString(locObj);
 
-                var banner  = item["bannerUri"]?.ToString() ?? string.Empty;
+                var banner  = item["bannerUri"]?.ToString()  ?? string.Empty;
                 var website = item["website"]?.ToString()   ?? $"https://ffxivvenues.com/{id}";
+                var discord = item["discord"]?.ToString()   ?? string.Empty;
 
                 var tags = new List<string>();
                 if (item["tags"] is JArray tagsArr)
@@ -99,6 +100,7 @@ public class FFXIVenueService : IDisposable
                     BannerUrl      = banner,
                     Tags           = tags,
                     EventUrl       = website,
+                    DiscordUrl     = discord,
                     Source         = EventSource.FFXIVenue,
                 });
             }

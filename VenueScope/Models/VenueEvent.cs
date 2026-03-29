@@ -30,6 +30,7 @@ public class VenueEvent
     public int    TeamId       { get; set; } = 0;
     public List<string> Tags { get; set; } = new();
     public string EventUrl { get; set; } = string.Empty;
+    public string DiscordUrl { get; set; } = string.Empty;
     public EventSource Source { get; set; }
     public int AttendeeCount { get; set; }
     public bool IsNew { get; set; }

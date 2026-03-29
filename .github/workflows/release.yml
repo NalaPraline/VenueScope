@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Code cleanup."
+          changelog: "Add Discord links for venues. Merge website and Discord into a single Links button."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
