@@ -126,7 +126,7 @@ public class PartakeService : IDisposable
                     id, title, locationId, ageRating, attendeeCount,
                     startsAt, endsAt, location, tags,
                     description(type: PLAIN_TEXT)
-                    team {{ id name iconUrl discordUrl }}
+                    team {{ id name iconUrl discordUrl websiteUrl instagramUrl }}
                     locationData {{
                         server {{ id name dataCenterId }}
                         dataCenter {{ id name }}
@@ -157,7 +157,7 @@ public class PartakeService : IDisposable
                     id, title, locationId, ageRating, attendeeCount,
                     startsAt, endsAt, location, tags,
                     description(type: PLAIN_TEXT)
-                    team {{ id name iconUrl discordUrl }}
+                    team {{ id name iconUrl discordUrl websiteUrl instagramUrl }}
                     locationData {{
                         server {{ id name dataCenterId }}
                         dataCenter {{ id name }}
@@ -180,8 +180,9 @@ public class PartakeService : IDisposable
         var result = new List<VenueEvent>(events.Count);
         foreach (var ev in events)
         {
-            var title       = SanitizeTitle(ev.Title ?? string.Empty);
+            var title       = SanitizeTitle(ev.Title       ?? string.Empty);
             var description = SanitizeTitle(ev.Description ?? string.Empty);
+            var location    = SanitizeTitle(ev.Location    ?? string.Empty);
 
             var serverName = ev.LocationData?.Server?.Name ?? string.Empty;
             var dcName     = ev.LocationData?.DataCenter?.Name ?? string.Empty;
@@ -201,11 +202,13 @@ public class PartakeService : IDisposable
                 EndTime          = ev.EndsAt == default ? null : ev.EndsAt,
                 Server           = serverName,
                 DataCenter       = dcName,
-                InGameLocation   = ev.Location,
-                LifestreamCode   = NormalizeLifestreamCode(ev.Location, serverName),
+                InGameLocation   = location,
+                LifestreamCode   = NormalizeLifestreamCode(location, serverName),
                 Tags             = tags,
                 EventUrl         = $"https://www.partake.gg/events/{ev.Id}",
-                DiscordUrl       = ev.Team?.DiscordUrl ?? string.Empty,
+                DiscordUrl       = ev.Team?.DiscordUrl   ?? string.Empty,
+                WebsiteUrl       = ev.Team?.WebsiteUrl   ?? string.Empty,
+                InstagramUrl     = ev.Team?.InstagramUrl ?? string.Empty,
                 Source           = EventSource.Partake,
                 AttendeeCount    = ev.AttendeeCount,
                 TeamName         = ev.Team?.Name ?? string.Empty,

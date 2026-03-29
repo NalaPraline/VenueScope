@@ -302,6 +302,14 @@ public static class EventRenderer
                 continue;
             }
 
+            if (IsDecorativeLine(line))
+            {
+                ImGui.Spacing();
+                ImGui.Separator();
+                ImGui.Spacing();
+                continue;
+            }
+
             if (line.StartsWith('='))
             {
                 if (i > 0) ImGui.Spacing();
@@ -343,7 +351,21 @@ public static class EventRenderer
         text = Regex.Replace(text, @"`([^`\n]+)`", "$1");                        // `code`
         text = Regex.Replace(text, @"^#{1,6}\s*", "", RegexOptions.Multiline);   // # headings
         text = Regex.Replace(text, @"^>\s*", "", RegexOptions.Multiline);        // > blockquotes
+        text = text.Replace('\u3000', ' ');                                       // ideographic space
+        text = text.Replace('\u00a0', ' ');                                       // non-breaking space
+        text = Regex.Replace(text, @"  +", " ", RegexOptions.Multiline);         // collapse multiple spaces
         return text.Trim();
+    }
+
+    private static bool IsDecorativeLine(string line)
+    {
+        if (line.Length < 2) return false;
+        foreach (char c in line)
+            if (c != '=' && c != '-' && c != '_' && c != '~' && c != '*'
+             && c != '|' && c != ' ' && c != '\u2500' && c != '\u2550'
+             && c != '\u2015' && c != '\u2014' && c != '\u00b7' && c != '\u2022')
+                return false;
+        return true;
     }
 
     private static readonly Vector4 ColFavOn  = new(1.00f, 0.82f, 0.14f, 1f);
@@ -355,7 +377,7 @@ public static class EventRenderer
         float spc = ImGui.GetStyle().ItemSpacing.X;
         float w   = 32f * gs + spc;
         w += 52f * gs + spc;
-        if (!string.IsNullOrEmpty(ev.EventUrl) || !string.IsNullOrEmpty(ev.DiscordUrl)) w += 52f * gs + spc;
+        if (!string.IsNullOrEmpty(ev.EventUrl) || !string.IsNullOrEmpty(ev.DiscordUrl) || !string.IsNullOrEmpty(ev.WebsiteUrl) || !string.IsNullOrEmpty(ev.InstagramUrl)) w += 52f * gs + spc;
         if (!string.IsNullOrEmpty(ev.LifestreamCode)) w += 90f * gs + spc;
         if (ev.Source == EventSource.FFXIVenue)       w += 32f * gs + spc;
         return w;
@@ -481,7 +503,7 @@ public static class EventRenderer
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Hide this venue");
         ImGui.SameLine(0, 4);
 
-        if (!string.IsNullOrEmpty(ev.EventUrl) || !string.IsNullOrEmpty(ev.DiscordUrl))
+        if (!string.IsNullOrEmpty(ev.EventUrl) || !string.IsNullOrEmpty(ev.DiscordUrl) || !string.IsNullOrEmpty(ev.WebsiteUrl) || !string.IsNullOrEmpty(ev.InstagramUrl))
         {
             using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.16f, 0.30f, 0.54f, 0.65f));
             using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.22f, 0.42f, 0.72f, 0.90f));
@@ -498,12 +520,25 @@ public static class EventRenderer
                 if (!string.IsNullOrEmpty(ev.EventUrl))
                 {
                     using var t1 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.72f, 0.86f, 1.00f, 1.00f));
-                    if (ImGui.MenuItem($"Open website##{ev.Id}lw"))
+                    string eventLabel = ev.Source == EventSource.Partake ? "Open on Partake" : "Open website";
+                    if (ImGui.MenuItem($"{eventLabel}##{ev.Id}lw"))
                         Util.OpenLink(ev.EventUrl);
+                }
+                if (!string.IsNullOrEmpty(ev.WebsiteUrl))
+                {
+                    using var t2 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.72f, 0.86f, 1.00f, 1.00f));
+                    if (ImGui.MenuItem($"Website##{ev.Id}lws"))
+                        Util.OpenLink(ev.WebsiteUrl);
+                }
+                if (!string.IsNullOrEmpty(ev.InstagramUrl))
+                {
+                    using var t3 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.90f, 0.50f, 0.70f, 1.00f));
+                    if (ImGui.MenuItem($"Instagram##{ev.Id}lig"))
+                        Util.OpenLink(ev.InstagramUrl);
                 }
                 if (!string.IsNullOrEmpty(ev.DiscordUrl))
                 {
-                    using var t2 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.76f, 0.80f, 1.00f, 1.00f));
+                    using var t4 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.76f, 0.80f, 1.00f, 1.00f));
                     if (ImGui.MenuItem($"Discord server##{ev.Id}ld"))
                         Util.OpenLink(ev.DiscordUrl);
                 }

@@ -31,10 +31,12 @@ public class PartakeEvent
 
 public class PartakeTeam
 {
-    [JsonProperty("id")]         public int    Id         { get; set; }
-    [JsonProperty("name")]       public string Name       { get; set; } = string.Empty;
-    [JsonProperty("iconUrl")]    public string? IconUrl   { get; set; }
-    [JsonProperty("discordUrl")] public string? DiscordUrl { get; set; }
+    [JsonProperty("id")]          public int    Id          { get; set; }
+    [JsonProperty("name")]        public string Name        { get; set; } = string.Empty;
+    [JsonProperty("iconUrl")]     public string? IconUrl    { get; set; }
+    [JsonProperty("discordUrl")]  public string? DiscordUrl { get; set; }
+    [JsonProperty("websiteUrl")]   public string? WebsiteUrl   { get; set; }
+    [JsonProperty("instagramUrl")] public string? InstagramUrl { get; set; }
 }
 
 public class PartakeLocationData
