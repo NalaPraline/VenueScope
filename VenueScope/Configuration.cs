@@ -5,12 +5,11 @@ using VenueScope.Models;
 
 namespace VenueScope;
 
-/// <summary>Persisted display info for a followed venue or team.</summary>
 [Serializable]
 public class FavoriteVenueInfo
 {
-    public string      VenueId    { get; set; } = string.Empty; // FFXIVenue event ID
-    public int         TeamId     { get; set; } = 0;            // Partake team ID
+    public string      VenueId    { get; set; } = string.Empty;
+    public int         TeamId     { get; set; } = 0;
     public string      Name       { get; set; } = string.Empty;
     public string      Server     { get; set; } = string.Empty;
     public string      DataCenter { get; set; } = string.Empty;
@@ -23,52 +22,59 @@ public class Configuration : IPluginConfiguration
 {
     public int Version { get; set; } = 1;
 
-    // ── Navigation memory ──────────────────────────────────────────────────
+    // Navigation
     public string       SelectedRegion      { get; set; } = string.Empty;
-    public string       SelectedDataCenter  { get; set; } = string.Empty; // legacy single-DC
+    public string       SelectedDataCenter  { get; set; } = string.Empty;
     public List<string> SelectedDataCenters { get; set; } = new();
 
-    // ── Sources ────────────────────────────────────────────────────────────
+    // Sources
     public bool ShowPartakeEvents   { get; set; } = true;
     public bool ShowFFXIVenueEvents { get; set; } = true;
 
-    // ── Refresh ────────────────────────────────────────────────────────────
+    // Refresh
     public int RefreshIntervalMinutes { get; set; } = 5;
 
-    // Last known event IDs for NEW-badge detection (JSON array)
+    // Last known event IDs for new-badge detection
     public string LastKnownEventIds { get; set; } = "[]";
 
-    // ── Notifications ──────────────────────────────────────────────────────
+    // Notifications
     public bool EnableNotifications { get; set; } = true;
-    // Empty list = notify for all DCs; non-empty = only these DCs
     public List<string> NotifyForDataCenters { get; set; } = new();
 
-    // ── Display ────────────────────────────────────────────────────────────
-    public bool HideEndedEvents    { get; set; } = false;
-    // 0 = All, 1 = Live Now, 2 = Today
-    public int  DefaultTimeFilter  { get; set; } = 0;
-    // -1 = All, 0 = Partake, 1 = FFXIVenue
-    public int  DefaultSourceFilter { get; set; } = -1;
+    // Display
+    public bool HideEndedEvents     { get; set; } = false;
+    public int  DefaultTimeFilter   { get; set; } = 0;   // 0 = All, 1 = Live Now, 2 = Today
+    public int  DefaultSourceFilter { get; set; } = -1;  // -1 = All, 0 = Partake, 1 = FFXIVenue
 
-    // ── Favorites ──────────────────────────────────────────────────────────
-    public HashSet<string> FavoriteEventIds      { get; set; } = new(); // FFXIVenue venue IDs
+    // Favorites
+    public HashSet<string> FavoriteEventIds      { get; set; } = new();
     public HashSet<int>    FavoritePartakeTeamIds { get; set; } = new();
-
-    // Persistent display info for followed venues/teams (key: "ffxiv:{id}" or "partake:{teamId}")
     public Dictionary<string, FavoriteVenueInfo> FavoriteVenueCache { get; set; } = new();
 
-    // ── Hidden venues ──────────────────────────────────────────────────────
-    public HashSet<string> HiddenVenueIds      { get; set; } = new(); // FFXIVenue venue IDs
-    public HashSet<int>    HiddenPartakeTeamIds { get; set; } = new(); // Partake team IDs
-
-    // Persistent display info for hidden venues (key: "ffxiv:{id}" or "partake:{teamId}")
+    // Hidden venues
+    public HashSet<string> HiddenVenueIds      { get; set; } = new();
+    public HashSet<int>    HiddenPartakeTeamIds { get; set; } = new();
     public Dictionary<string, FavoriteVenueInfo> HiddenVenueCache { get; set; } = new();
 
-    // ── Legacy (kept for compat, not exposed in UI) ────────────────────────
+    // One character per region for auto-switch on teleport
+    // Key: "Japan" | "North America" | "Europe" | "Oceania"  Value: "Name@World"
+    public Dictionary<string, string> CharacterPerRegion { get; set; } = new();
+
+    // Pending teleport — stored before character switch, executed after login
+    public string PendingVenueServer        { get; set; } = string.Empty;
+    public string PendingVenueCode          { get; set; } = string.Empty;
+    public string PendingExpectedCharacter  { get; set; } = string.Empty;
+
+    // Pending ConnectAndTravel — stores travel target while waiting for title screen
+    public string PendingTravelCharName     { get; set; } = string.Empty;
+    public string PendingTravelHomeWorld    { get; set; } = string.Empty;
+    public string PendingTravelDestination  { get; set; } = string.Empty;
+
+    // Legacy
     public List<string> FavoriteDataCenters { get; set; } = new();
     public List<string> FavoriteServers     { get; set; } = new();
 
-    // ── Runtime-only (not serialized) ─────────────────────────────────────
+    // Not serialized
     [NonSerialized] public bool SelectedRegionSet     = false;
     [NonSerialized] public bool SelectedDataCenterSet = false;
 

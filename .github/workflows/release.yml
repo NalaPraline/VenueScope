@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Fix location display by removing decorative symbols (hearts, stars, emoji, etc.) that break address parsing."
+          changelog: "Add auto character switch per region for cross-DC teleports."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

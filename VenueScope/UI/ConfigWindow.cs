@@ -49,6 +49,8 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.Spacing();
         DrawSectionDisplay();
         ImGui.Spacing();
+        DrawSectionCharacters();
+        ImGui.Spacing();
         DrawSectionIntegrations();
         ImGui.Spacing();
         DrawSectionHiddenVenues();
@@ -213,6 +215,38 @@ public sealed class ConfigWindow : Window, IDisposable
         if (DrawRadio("Partake##defsrc",   _config.DefaultSourceFilter,  0)) { _config.DefaultSourceFilter =  0; _config.Save(); }
         ImGui.SameLine(0, 12);
         if (DrawRadio("FFXIV Venues##defsrc", _config.DefaultSourceFilter,  1)) { _config.DefaultSourceFilter =  1; _config.Save(); }
+
+        ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
+    }
+
+    private static readonly string[] CharacterRegions = ["Japan", "North America", "Europe"];
+
+    private void DrawSectionCharacters()
+    {
+        if (!SectionHeader("  Characters")) return;
+        ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
+
+        ImGui.TextColored(ColSubtitle, "One character per region for automatic switching.");
+        ImGui.TextColored(ColSubtitle with { W = 0.6f }, "Format:  Character Name@World  (e.g. Nala Praline@Moogle)");
+        ImGui.Spacing();
+
+        foreach (var region in CharacterRegions)
+        {
+            ImGui.TextColored(ColAccent, region);
+            ImGui.SameLine(120f * ImGuiHelpers.GlobalScale);
+            ImGui.SetNextItemWidth(260f * ImGuiHelpers.GlobalScale);
+
+            _config.CharacterPerRegion.TryGetValue(region, out var current);
+            var buf = current ?? string.Empty;
+            if (ImGui.InputText($"##{region}char", ref buf, 64))
+            {
+                if (string.IsNullOrWhiteSpace(buf))
+                    _config.CharacterPerRegion.Remove(region);
+                else
+                    _config.CharacterPerRegion[region] = buf;
+                _config.Save();
+            }
+        }
 
         ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }

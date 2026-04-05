@@ -32,12 +32,13 @@ public static class EventRenderer
     public static Services.FFXIVenueService? FlagService;
     public static Action<string>? OnHideVenue;
 
-    // one popup at a time
+    // one popup at a time — flag
     private static string _flagVenueId  = string.Empty;
     private static int    _flagCategory = 0;
     private static string _flagDesc     = string.Empty;
     private static bool   _flagBusy     = false;
     private static string _flagStatus   = string.Empty;
+
 
     private static IDalamudTextureWrap? GetIcon(VenueEvent ev) =>
         IconCache?.GetOrQueue(
@@ -557,7 +558,62 @@ public static class EventRenderer
             {
                 if (lsAvail)
                 {
-                    Plugin.CommandManager.ProcessCommand($"/li {ev.LifestreamCode}");
+                    string venueRegion   = Plugin.GetServerRegion(ev.Server) ?? string.Empty;
+                    string currentRegion = Plugin.GetCurrentCharacterRegion() ?? venueRegion;
+
+                    // OCE is reachable via DC travel from any region — no character switch needed
+                    bool needsSwitch = venueRegion != currentRegion
+                                    && !string.IsNullOrEmpty(venueRegion)
+                                    && venueRegion != "Oceania";
+
+                    if (!needsSwitch)
+                    {
+                        // TP directly via IPC — LifestreamCode already includes the world name
+                        Plugin.LifestreamIpc.ExecuteCommand(ev.LifestreamCode);
+                    }
+                    else if (needsSwitch && config.CharacterPerRegion.TryGetValue(venueRegion, out var charEntry)
+                             && !string.IsNullOrEmpty(charEntry))
+                    {
+                        var parts = charEntry.Split('@', 2);
+                        if (parts.Length == 2)
+                        {
+                            string charName  = parts[0].Trim();
+                            string charWorld = parts[1].Trim();
+
+                            config.PendingVenueCode          = ev.LifestreamCode;
+                            config.PendingExpectedCharacter  = $"{charName}@{charWorld}";
+                            config.PendingVenueServer        = string.Empty;
+                            config.PendingTravelCharName     = charName;
+                            config.PendingTravelHomeWorld    = charWorld;
+                            config.PendingTravelDestination  = ev.Server; // world name only
+                            config.Save();
+
+                            Plugin.Log.Information($"Logging out to switch to {charName}@{charWorld} for {venueRegion} venue ({ev.Server})");
+                            int errCode = Plugin.LifestreamIpc.Logout();
+                            bool ok = errCode == 0;
+
+                            if (ok)
+                                Plugin.BeginPendingTravel();
+
+                            Plugin.NotificationManager.AddNotification(new Notification
+                            {
+                                Title   = ok ? $"Switching to {charName}" : "Switch failed",
+                                Content = ok
+                                    ? $"Logging out — will travel to {ev.Server} on login."
+                                    : "Lifestream could not log out. Make sure Lifestream is loaded.",
+                                Type    = ok ? NotificationType.Info : NotificationType.Error,
+                            });
+                        }
+                    }
+                    else
+                    {
+                        Plugin.NotificationManager.AddNotification(new Notification
+                        {
+                            Title   = "No character configured",
+                            Content = $"This venue is in {venueRegion}. Configure a character for that region in Settings → Characters.",
+                            Type    = NotificationType.Warning,
+                        });
+                    }
                 }
                 else
                 {
@@ -570,7 +626,9 @@ public static class EventRenderer
                 }
             }
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(lsAvail ? $"/li {ev.LifestreamCode}" : "Lifestream is not installed, click for details");
+            {
+                ImGui.SetTooltip(lsAvail ? $"Teleport: {ev.LifestreamCode}" : "Lifestream is not installed, click for details");
+            }
         }
 
         if (ev.Source == EventSource.FFXIVenue)
