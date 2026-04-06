@@ -414,6 +414,7 @@ public class PartakeService : IDisposable
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bGoblets?\b",         "The Goblet",     ri);
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bEmpyreum\b",         "Empyreum",       ri);
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bShirogane\b",        "Shirogane",      ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bLouisiox\b",         "Louisoix",       ri);
 
         // expand concatenated ward+plot: W7P5 → W7 P5
         s = System.Text.RegularExpressions.Regex.Replace(

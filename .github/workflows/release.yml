@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Add auto character switch per region for cross-DC teleports."
+          changelog: "Fix button alignment between Partake and FFXIVVenues rows; correct Louisoix server name typo in Lifestream codes."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

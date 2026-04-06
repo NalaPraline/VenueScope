@@ -380,7 +380,7 @@ public static class EventRenderer
         w += 52f * gs + spc;
         if (!string.IsNullOrEmpty(ev.EventUrl) || !string.IsNullOrEmpty(ev.DiscordUrl) || !string.IsNullOrEmpty(ev.WebsiteUrl) || !string.IsNullOrEmpty(ev.InstagramUrl)) w += 52f * gs + spc;
         if (!string.IsNullOrEmpty(ev.LifestreamCode)) w += 90f * gs + spc;
-        if (ev.Source == EventSource.FFXIVenue)       w += 32f * gs + spc;
+        w += 32f * gs + spc;
         return w;
     }
 
@@ -631,9 +631,9 @@ public static class EventRenderer
             }
         }
 
+        ImGui.SameLine(0, 4);
         if (ev.Source == EventSource.FFXIVenue)
         {
-            ImGui.SameLine(0, 4);
             using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.35f, 0.12f, 0.12f, 0.65f));
             using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.55f, 0.18f, 0.18f, 0.90f));
             using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.70f, 0.22f, 0.22f, 1.00f));
@@ -648,6 +648,10 @@ public static class EventRenderer
                 ImGui.OpenPopup("##venueflagpopup");
             }
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Report this venue");
+        }
+        else
+        {
+            ImGui.Dummy(new Vector2(32f * ImGuiHelpers.GlobalScale, 1f));
         }
     }
 
