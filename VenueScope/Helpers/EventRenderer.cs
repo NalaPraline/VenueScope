@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text;
 using System.Text.RegularExpressions;
 using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Bindings.ImGui;
@@ -31,6 +33,29 @@ public static class EventRenderer
     public static Services.TeamIconCache? IconCache;
     public static Services.FFXIVenueService? FlagService;
     public static Action<string>? OnHideVenue;
+
+    private static readonly HashSet<string> _openDescriptions = new();
+    private static readonly Regex ColonEmojiRx  = new(@":[A-Za-z0-9_+\-]+:",      RegexOptions.Compiled);
+    private static readonly Regex MdImageRx     = new(@"!\[[^\]]*\]\([^)]*\)",     RegexOptions.Compiled);
+    private static readonly Regex MdLinkRx      = new(@"\[([^\]]*)\]\([^)]*\)",    RegexOptions.Compiled);
+    private static readonly Regex MdBoldItalRx  = new(@"\*{1,3}([^*\n]*)\*{1,3}", RegexOptions.Compiled);
+    private static readonly Regex MdUnderRx     = new(@"_{1,2}([^_\n]*)_{1,2}",   RegexOptions.Compiled);
+    private static readonly Regex MdStrikeRx    = new(@"~~([^~\n]*)~~",            RegexOptions.Compiled);
+    private static readonly Regex MdCodeRx      = new(@"`([^`\n]*)`",              RegexOptions.Compiled);
+    private static readonly Regex MdHeadingRx   = new(@"^#{1,6}\s*",              RegexOptions.Compiled);
+
+    private static string StripMarkdown(string s)
+    {
+        s = MdImageRx.Replace(s, "");
+        s = MdLinkRx.Replace(s, "$1");
+        s = MdBoldItalRx.Replace(s, "$1");
+        s = MdUnderRx.Replace(s, "$1");
+        s = MdStrikeRx.Replace(s, "$1");
+        s = MdCodeRx.Replace(s, "$1");
+        s = MdHeadingRx.Replace(s, "");
+        s = s.Replace("**", "").Replace("__", "").Replace("~~", "");
+        return s.Trim();
+    }
 
     // one popup at a time — flag
     private static string _flagVenueId  = string.Empty;
@@ -74,7 +99,7 @@ public static class EventRenderer
     private const float ThumbW  = 50f;
     private const float ThumbH  = 42f;
     private const float ThumbGap = 8f;
-    
+
 
     public static void DrawEventCard(VenueEvent ev, CachedEventStrings cached, Configuration config)
     {
@@ -108,8 +133,15 @@ public static class EventRenderer
         DrawInfoRow(ev, cached, srcColor, statusColor);
         if (cached.Tags.Length > 0)
             DrawTags(ev.Id, cached.Tags, srcColor);
-        if (!string.IsNullOrEmpty(ev.Description))
+        if (ev.Source == EventSource.Partake)
+        {
+            if (!string.IsNullOrEmpty(ev.EventUrl) || HasVisibleContent(ev.Description))
+                DrawDescription(ev);
+        }
+        else if (!string.IsNullOrEmpty(ev.Description) && HasVisibleContent(ev.Description))
+        {
             DrawDescription(ev);
+        }
 
         ImGui.Dummy(new Vector2(0f, padY));
         ImGui.Unindent(indent);
@@ -204,7 +236,7 @@ public static class EventRenderer
 
         DrawActions(ev, actW, config);
     }
-    
+
     private static void DrawInfoRow(VenueEvent ev, CachedEventStrings cached,
                                     Vector4 srcColor, Vector4 statusColor)
     {
@@ -228,7 +260,7 @@ public static class EventRenderer
                         ImGuiSelectableFlags.None, new Vector2(locW, 0)))
                     ImGui.SetClipboardText(string.IsNullOrEmpty(cached.ServerDc)
                         ? cached.Location
-                        : $"{cached.ServerDc} \u2013 {cached.Location}");
+                        : $"{cached.ServerDc} – {cached.Location}");
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip("Click to copy location");
             }
@@ -250,7 +282,7 @@ public static class EventRenderer
         }
 
         Dot();
-        string timeStr = $"{cached.StartsAtLocal} \u2192 {cached.EndsAtLocal}";
+        string timeStr = $"{cached.StartsAtLocal} → {cached.EndsAtLocal}";
         using (ImRaii.PushColor(ImGuiCol.Text, statusColor with { W = 0.85f }))
             ImGui.TextUnformatted(timeStr);
         if (ImGui.IsItemHovered())
@@ -278,94 +310,140 @@ public static class EventRenderer
         using var c1 = ImRaii.PushColor(ImGuiCol.Header,        new Vector4(0.14f, 0.14f, 0.22f, 0.00f));
         using var c2 = ImRaii.PushColor(ImGuiCol.HeaderHovered, new Vector4(0.20f, 0.20f, 0.30f, 1.00f));
 
+        bool isOpen = _openDescriptions.Contains(ev.Id);
+        ImGui.SetNextItemOpen(isOpen, ImGuiCond.Always);
         bool open;
         using (ImRaii.PushColor(ImGuiCol.Text, ColMuted))
             open = ImGui.CollapsingHeader($"Description##{ev.Id}");
-
+        if (open != isOpen)
+        {
+            if (open) _openDescriptions.Add(ev.Id);
+            else _openDescriptions.Remove(ev.Id);
+        }
         if (open)
-            DrawDescriptionLines(StripMarkdown(ev.Description));
+        {
+            if (ev.Source == EventSource.Partake)
+                DrawTeamInfo(ev);
+            else
+                DrawDescriptionContent(ev.Description);
+        }
     }
 
     private static readonly Vector4 ColDescSection = new(0.90f, 0.75f, 0.40f, 1f);
     private static readonly Vector4 ColDescBody    = new(0.78f, 0.78f, 0.82f, 1f);
+    private static readonly Vector4 ColDescLink    = new(0.55f, 0.75f, 1.00f, 1f);
 
-    private static void DrawDescriptionLines(string text)
+    private static void DrawDescriptionContent(string text)
     {
+        if (string.IsNullOrEmpty(text)) return;
+        float gs    = ImGuiHelpers.GlobalScale;
+        float lineH = ImGui.GetTextLineHeight();
         ImGui.Spacing();
-        var lines = text.Split('\n');
-        for (int i = 0; i < lines.Length; i++)
+        bool lastWasBlank = true;
+        foreach (var raw in text.Split('\n'))
         {
-            var line = lines[i].TrimEnd();
-
+            var line = ColonEmojiRx.Replace(raw.TrimEnd(), "");
             if (string.IsNullOrWhiteSpace(line))
             {
-                ImGui.Spacing();
+                if (!lastWasBlank)
+                {
+                    ImGui.Dummy(new Vector2(0f, lineH * 0.35f));
+                    lastWasBlank = true;
+                }
                 continue;
             }
-
-            if (IsDecorativeLine(line))
+            lastWasBlank = false;
+            var trimmed = StripMarkdown(line.Trim());
+            if (string.IsNullOrWhiteSpace(trimmed)) continue;
+            if (IsDecorativeLine(trimmed))
             {
-                ImGui.Spacing();
                 ImGui.Separator();
+                continue;
+            }
+            if (trimmed.Length < 60 && trimmed.EndsWith(':'))
+            {
                 ImGui.Spacing();
+                using (ImRaii.PushColor(ImGuiCol.Text, ColDescSection))
+                    ImGui.TextUnformatted(trimmed);
                 continue;
             }
-
-            if (line.StartsWith('='))
+            if (!trimmed.Contains(' ') &&
+                (trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                 trimmed.StartsWith("http://",  StringComparison.OrdinalIgnoreCase)))
             {
-                if (i > 0) ImGui.Spacing();
-                using var c = ImRaii.PushColor(ImGuiCol.Text, ColDescSection);
-                ImGui.TextUnformatted(line[1..].Trim());
+                // skip image attachment URLs
+                var tl = trimmed.ToLowerInvariant();
+                if (tl.EndsWith(".png") || tl.EndsWith(".jpg") || tl.EndsWith(".jpeg") ||
+                    tl.EndsWith(".gif") || tl.EndsWith(".webp")) continue;
+                using (ImRaii.PushColor(ImGuiCol.Text, ColDescLink))
+                    ImGui.TextUnformatted(trimmed);
+                if (ImGui.IsItemHovered())
+                {
+                    ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+                    ImGui.SetTooltip(trimmed);
+                }
+                if (ImGui.IsItemClicked())
+                    Util.OpenLink(trimmed);
                 continue;
             }
-
-            var words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            bool isSection = line.Length <= 25
-                          && words.Length <= 3
-                          && !line.Contains("<<")
-                          && !line.EndsWith('.') && !line.EndsWith('!')
-                          && !line.EndsWith('?') && !line.EndsWith(',')
-                          && !line.EndsWith(';');
-
-            if (isSection)
-            {
-                if (i > 0) ImGui.Spacing();
-                using var c = ImRaii.PushColor(ImGuiCol.Text, ColDescSection);
-                ImGui.TextUnformatted(line);
-            }
-            else
-            {
-                using var c = ImRaii.PushColor(ImGuiCol.Text, ColDescBody);
-                ImGui.TextWrapped(line);
-            }
+            using (ImRaii.PushColor(ImGuiCol.Text, ColDescBody))
+                ImGui.TextWrapped(trimmed);
         }
         ImGui.Spacing();
     }
 
-    private static string StripMarkdown(string text)
+    private static void DrawTeamInfo(VenueEvent ev)
     {
-        if (string.IsNullOrEmpty(text)) return text;
-        text = Regex.Replace(text, @"\[([^\]]*)\]\([^)]*\)", "$1");              // [text](url) → text
-        text = Regex.Replace(text, @"\*{1,2}([^*\n]+)\*{1,2}", "$1");           // **bold** / *italic*
-        text = Regex.Replace(text, @"_{1,2}([^_\n]+)_{1,2}", "$1");             // __bold__ / _italic_
-        text = Regex.Replace(text, @"~~([^~\n]+)~~", "$1");                      // ~~strike~~
-        text = Regex.Replace(text, @"`([^`\n]+)`", "$1");                        // `code`
-        text = Regex.Replace(text, @"^#{1,6}\s*", "", RegexOptions.Multiline);   // # headings
-        text = Regex.Replace(text, @"^>\s*", "", RegexOptions.Multiline);        // > blockquotes
-        text = text.Replace('\u3000', ' ');                                       // ideographic space
-        text = text.Replace('\u00a0', ' ');                                       // non-breaking space
-        text = Regex.Replace(text, @"  +", " ", RegexOptions.Multiline);         // collapse multiple spaces
-        return text.Trim();
+        ImGui.Spacing();
+
+        if (!string.IsNullOrEmpty(ev.TeamDescription))
+        {
+            using (ImRaii.PushColor(ImGuiCol.Text, ColDescBody))
+                ImGui.TextWrapped(ev.TeamDescription);
+            ImGui.Spacing();
+        }
+
+        if (HasVisibleContent(ev.Description))
+            DrawDescriptionContent(ev.Description);
+
+        if (!string.IsNullOrEmpty(ev.EventUrl))
+        {
+            using (ImRaii.PushColor(ImGuiCol.Text, ColDescLink))
+                ImGui.TextUnformatted("View full event description on Partake →");
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+                ImGui.SetTooltip(ev.EventUrl);
+            }
+            if (ImGui.IsItemClicked())
+                Util.OpenLink(ev.EventUrl);
+            ImGui.Spacing();
+        }
+    }
+
+    private static bool HasVisibleContent(string text)
+    {
+        foreach (var raw in text.Split('\n'))
+        {
+            var line = ColonEmojiRx.Replace(raw.TrimEnd(), "");
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var stripped = StripMarkdown(line.Trim());
+            if (string.IsNullOrWhiteSpace(stripped)) continue;
+            if (IsDecorativeLine(stripped)) continue;
+            var tl = stripped.ToLowerInvariant();
+            if (!stripped.Contains(' ') &&
+                (tl.EndsWith(".png") || tl.EndsWith(".jpg") || tl.EndsWith(".jpeg") ||
+                 tl.EndsWith(".gif") || tl.EndsWith(".webp"))) continue;
+            return true;
+        }
+        return false;
     }
 
     private static bool IsDecorativeLine(string line)
     {
-        if (line.Length < 2) return false;
+        if (line.Length < 1) return false;
         foreach (char c in line)
-            if (c != '=' && c != '-' && c != '_' && c != '~' && c != '*'
-             && c != '|' && c != ' ' && c != '\u2500' && c != '\u2550'
-             && c != '\u2015' && c != '\u2014' && c != '\u00b7' && c != '\u2022')
-                return false;
+            if (char.IsLetterOrDigit(c)) return false;
         return true;
     }
 
@@ -399,7 +477,7 @@ public static class EventRenderer
         using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.50f, 0.40f, 0.08f, 1.00f)))
         using (ImRaii.PushColor(ImGuiCol.Text,          isFav ? ColFavOn : ColFavOff))
         {
-            if (ImGui.SmallButton($" {(isFav ? "\u2605" : "\u2606")} ##{ev.Id}fav"))
+            if (ImGui.SmallButton($" {(isFav ? "★" : "☆")} ##{ev.Id}fav"))
             {
                 if (ev.Source == EventSource.Partake && ev.TeamId > 0)
                 {
@@ -750,7 +828,7 @@ public static class EventRenderer
     {
         ImGui.SameLine(0, 6);
         using (ImRaii.PushColor(ImGuiCol.Text, ColBullet))
-            ImGui.TextUnformatted("\u00b7");
+            ImGui.TextUnformatted("·");
         ImGui.SameLine(0, 6);
     }
 

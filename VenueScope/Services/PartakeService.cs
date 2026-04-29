@@ -51,8 +51,8 @@ public class PartakeService : IDisposable
             {
                 var name = wg.Name.ExtractText();
                 // region 7 = cloud/dev DCs
-                if (name != "Dev" && name != "Shadow" && wg.Region != 7)
-                    DataCenters[(int)wg.RowId] = new DataCenterInfo((int)wg.RowId, name, wg.Region);
+                if (name != "Dev" && name != "Shadow" && wg.Region.RowId != 7)
+                    DataCenters[(int)wg.RowId] = new DataCenterInfo((int)wg.RowId, name, (int)wg.Region.RowId);
             }
         }
 
@@ -125,8 +125,8 @@ public class PartakeService : IDisposable
                 events(game: ""final-fantasy-xiv"", sortBy: STARTS_AT, limit: 100, offset: {page * 100}) {{
                     id, title, locationId, ageRating, attendeeCount,
                     startsAt, endsAt, location, tags,
-                    description(type: PLAIN_TEXT)
-                    team {{ id name iconUrl discordUrl websiteUrl instagramUrl }}
+                    description(type: MARKDOWN)
+                    team {{ id name description iconUrl discordUrl websiteUrl instagramUrl }}
                     locationData {{
                         server {{ id name dataCenterId }}
                         dataCenter {{ id name }}
@@ -137,10 +137,8 @@ public class PartakeService : IDisposable
 
         var res = await _graphQL.SendQueryAsync<EventsResponseType>(request);
         if (res.Errors is { Length: > 0 })
-        {
             foreach (var err in res.Errors)
                 _log.Error($"[Partake] GraphQL error: {err.Message}");
-        }
         return MapToVenueEvents(res.Data?.Events ?? new());
     }
 
@@ -156,8 +154,8 @@ public class PartakeService : IDisposable
                        endsBetween:   {{ start: ""{now}"" }}) {{
                     id, title, locationId, ageRating, attendeeCount,
                     startsAt, endsAt, location, tags,
-                    description(type: PLAIN_TEXT)
-                    team {{ id name iconUrl discordUrl websiteUrl instagramUrl }}
+                    description(type: MARKDOWN)
+                    team {{ id name description iconUrl discordUrl websiteUrl instagramUrl }}
                     locationData {{
                         server {{ id name dataCenterId }}
                         dataCenter {{ id name }}
@@ -168,10 +166,8 @@ public class PartakeService : IDisposable
 
         var res = await _graphQL.SendQueryAsync<EventsResponseType>(request);
         if (res.Errors is { Length: > 0 })
-        {
             foreach (var err in res.Errors)
                 _log.Error($"[Partake] GraphQL error (active): {err.Message}");
-        }
         return MapToVenueEvents(res.Data?.Events ?? new());
     }
 
@@ -211,7 +207,8 @@ public class PartakeService : IDisposable
                 InstagramUrl     = ev.Team?.InstagramUrl ?? string.Empty,
                 Source           = EventSource.Partake,
                 AttendeeCount    = ev.AttendeeCount,
-                TeamName         = ev.Team?.Name ?? string.Empty,
+                TeamName         = ev.Team?.Name    ?? string.Empty,
+                TeamDescription  = ev.Team?.Description ?? string.Empty,
                 TeamIconUrl      = ev.Team?.IconUrl ?? string.Empty,
                 TeamId           = ev.Team?.Id ?? 0,
             });
@@ -334,7 +331,21 @@ public class PartakeService : IDisposable
     {
         if (string.IsNullOrWhiteSpace(raw)) return raw;
 
-        var (first, sep, tail) = SplitFirstToken(raw.Trim());
+        var ri = System.Text.RegularExpressions.RegexOptions.IgnoreCase;
+
+        // Strip EU- region prefix
+        raw = System.Text.RegularExpressions.Regex.Replace(raw.Trim(), @"^EU-?\s*", "", ri);
+        // Strip known DC name prefix (optional brackets)
+        raw = System.Text.RegularExpressions.Regex.Replace(raw,
+            @"^\[?(Light|Chaos|Moogle|Elemental|Meteor|Gaia|Mana|Aether|Crystal|Primal|Dynamis|Materia)\]?\s*[-|]?\s*", "", ri);
+        // Strip server name if it now appears at start
+        if (!string.IsNullOrEmpty(serverNameFromApi))
+            raw = System.Text.RegularExpressions.Regex.Replace(raw,
+                @"^" + System.Text.RegularExpressions.Regex.Escape(serverNameFromApi) + @"\b\s*[-|]?\s*", "", ri);
+        raw = raw.Trim();
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+
+        var (first, sep, tail) = SplitFirstToken(raw);
         string firstLower = first.ToLowerInvariant();
 
         string result;
@@ -408,18 +419,33 @@ public class PartakeService : IDisposable
     private static string CleanLifestreamCode(string s)
     {
         var ri = System.Text.RegularExpressions.RegexOptions.IgnoreCase;
-        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bLavender Beds?\b",  "Lavender Beds",  ri);
-        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bMists?\b",           "Mist",           ri);
-        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bThe Goblet\b",       "The Goblet",     ri);
-        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bGoblets?\b",         "The Goblet",     ri);
-        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bEmpyreum\b",         "Empyreum",       ri);
-        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bShirogane\b",        "Shirogane",      ri);
-        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bLouisiox\b",         "Louisoix",       ri);
 
-        // expand concatenated ward+plot: W7P5 → W7 P5
-        s = System.Text.RegularExpressions.Regex.Replace(
-            s, @"\bW(\d+)P(\d+)\b", "W$1 P$2",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Unicode decorative separators → space
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"[♥•★☆◆❤♦]\s*", " ");
+
+        // District normalizations (order matters: specific before generic)
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bLav\.?\s*Beds?\.?\b", "Lavender Beds", ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bLavender Beds?\b",    "Lavender Beds", ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bLB\b",                "Lavender Beds", ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bMists?\b",            "Mist",          ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bThe Goblet\b",        "The Goblet",    ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bGoblets?\b",          "The Goblet",    ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bEmpereum\b",          "Empyreum",      ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bEmpyreum\b",          "Empyreum",      ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bShirogane\b",         "Shirogane",     ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bLouisiox\b",          "Louisoix",      ri);
+
+        // Ward/Plot case normalization (handles ALL-CAPS)
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bWard\b", "Ward", ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bPlot\b", "Plot", ri);
+
+        // W##-P## or W##/P## → W## P##
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bW(\d+)[-]P(\d+)\b", "W$1 P$2", ri);
+        // W##P## concatenated → W## P##
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bW(\d+)P(\d+)\b",    "W$1 P$2", ri);
+        // lowercase w## p## → W## P##
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bw(\d+)\b", "W$1");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bp(\d+)\b", "P$1");
 
         var sb = new StringBuilder(s.Length);
         bool lastWasSpace = false;

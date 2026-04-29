@@ -1,5 +1,6 @@
 {
   "Author": "Nala Praline",
+  "DalamudApiLevel": 15,
   "Name": "VenueScope",
   "Punchline": "Browse FFXIV community events in-game.",
   "Description": "Browse FFXIV community events directly in-game. Filter by data center, time, and tags.\n\nCommands:\n/venuescope or /vs: open VenueScope",

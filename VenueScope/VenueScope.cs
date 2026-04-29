@@ -22,6 +22,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ITextureProvider        TextureProvider      { get; private set; } = null!;
     [PluginService] internal static IClientState            ClientState          { get; private set; } = null!;
     [PluginService] internal static IFramework              Framework            { get; private set; } = null!;
+    [PluginService] internal static IObjectTable            ObjectTable          { get; private set; } = null!;
 
     internal static LifestreamIPC  LifestreamIpc   { get; private set; } = null!;
     internal static PartakeService PartakeRef      { get; private set; } = null!;
@@ -145,10 +146,8 @@ public sealed class Plugin : IDalamudPlugin
     // Returns "Japan" | "North America" | "Europe" | "Oceania" for the current logged-in character, or null.
     internal static string? GetCurrentCharacterRegion()
     {
-#pragma warning disable CS0618
-        if (ClientState.LocalPlayer == null) return null;
-        int worldId = (int)ClientState.LocalPlayer.HomeWorld.RowId;
-#pragma warning restore CS0618
+        if (ObjectTable.LocalPlayer == null) return null;
+        int worldId = (int)ObjectTable.LocalPlayer.HomeWorld.RowId;
         if (!PartakeRef.Servers.TryGetValue(worldId, out var server)) return null;
         if (!PartakeRef.DataCenters.TryGetValue(server.DataCenterId, out var dc)) return null;
         return PartakeService.RegionList.ElementAtOrDefault(dc.Region);
@@ -231,9 +230,7 @@ public sealed class Plugin : IDalamudPlugin
         // Phase 2 — TerritoryChanged fired but LocalPlayer was null; wait until it's available then execute
         if (_pendingTeleportOnLoad && !string.IsNullOrEmpty(Configuration.PendingVenueCode))
         {
-#pragma warning disable CS0618
-            var player = ClientState.LocalPlayer;
-#pragma warning restore CS0618
+            var player = ObjectTable.LocalPlayer;
             if (player == null) return;
 
             // Start the 1.5s countdown the first time LocalPlayer is available
@@ -246,9 +243,7 @@ public sealed class Plugin : IDalamudPlugin
 
             if (!string.IsNullOrEmpty(Configuration.PendingExpectedCharacter))
             {
-#pragma warning disable CS0618
                 var homeWorldId = (int)player.HomeWorld.RowId;
-#pragma warning restore CS0618
                 var world   = PartakeRef.Servers.TryGetValue(homeWorldId, out var srv) ? srv.Name : string.Empty;
                 var current = $"{player.Name.TextValue}@{world}";
                 if (!Configuration.PendingExpectedCharacter.Equals(current, StringComparison.OrdinalIgnoreCase))
@@ -284,22 +279,18 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     // Fires when territory finishes loading — more reliable than Login for travel commands
-    private void OnTerritoryChanged(ushort territoryId)
+    private void OnTerritoryChanged(uint territoryId)
     {
         if (string.IsNullOrEmpty(Configuration.PendingVenueCode)) return;
 
         // Verify we're on the expected character if set
         if (!string.IsNullOrEmpty(Configuration.PendingExpectedCharacter))
         {
-#pragma warning disable CS0618
-            var player = ClientState.LocalPlayer;
-#pragma warning restore CS0618
+            var player = ObjectTable.LocalPlayer;
             // LocalPlayer may be null on the first TerritoryChanged at login — defer to Framework.Update
             if (player == null) { _pendingTeleportOnLoad = true; return; }
 
-#pragma warning disable CS0618
             var homeWorldId = (int)player.HomeWorld.RowId;
-#pragma warning restore CS0618
             var world   = PartakeRef.Servers.TryGetValue(homeWorldId, out var srv) ? srv.Name : string.Empty;
             var current = $"{player.Name.TextValue}@{world}";
             if (!Configuration.PendingExpectedCharacter.Equals(current, System.StringComparison.OrdinalIgnoreCase))
