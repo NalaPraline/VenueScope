@@ -21,7 +21,6 @@ public class VenueEvent
     public string DataCenter { get; set; } = string.Empty;
     public string InGameLocation { get; set; } = string.Empty;
 
-    // Code Lifestream pour téléportation rapide (ex: "Goblet W8 P12")
     public string LifestreamCode { get; set; } = string.Empty;
 
     public string BannerUrl    { get; set; } = string.Empty;
@@ -37,4 +36,7 @@ public class VenueEvent
     public EventSource Source { get; set; }
     public int AttendeeCount { get; set; }
     public bool IsNew { get; set; }
+
+    [System.NonSerialized]
+    public SynchellEntry? LinkedSynchell;
 }

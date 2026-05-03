@@ -4,10 +4,6 @@ using VenueScope.Models;
 
 namespace VenueScope.Helpers;
 
-/// <summary>
-/// Caches tag-filtered event lists per data center.
-/// Invalidates when the selected-tag set changes.
-/// </summary>
 public class EventFilterCache
 {
     private readonly Dictionary<string, (List<VenueEvent> filtered, int tagHash)> _cache = new();

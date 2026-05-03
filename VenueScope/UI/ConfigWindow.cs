@@ -147,6 +147,15 @@ public sealed class ConfigWindow : Window, IDisposable
             _config.Save();
         }
 
+        ImGui.Spacing();
+
+        var syncPopup = _config.EnableSyncshellPopup;
+        if (ImGui.Checkbox("Show syncshell popup when entering a venue", ref syncPopup))
+        {
+            _config.EnableSyncshellPopup = syncPopup;
+            _config.Save();
+        }
+
         if (_config.EnableNotifications)
         {
             ImGui.Spacing();

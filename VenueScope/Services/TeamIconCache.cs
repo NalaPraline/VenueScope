@@ -10,10 +10,6 @@ using Dalamud.Plugin.Services;
 
 namespace VenueScope.Services;
 
-/// <summary>
-/// Downloads team icon images from Partake.gg CDN asynchronously,
-/// caches them on disk, and exposes Dalamud texture wraps for ImGui rendering.
-/// </summary>
 public sealed class TeamIconCache : IDisposable
 {
     private readonly ITextureProvider _textures;
@@ -42,11 +38,6 @@ public sealed class TeamIconCache : IDisposable
         Directory.CreateDirectory(_cacheDir);
     }
 
-    /// <summary>
-    /// Returns an <see cref="IDalamudTextureWrap"/> if the image is ready,
-    /// otherwise queues a background download and returns null.
-    /// Safe to call every frame.
-    /// </summary>
     public IDalamudTextureWrap? GetOrQueue(string? url)
     {
         if (string.IsNullOrEmpty(url) || _disposed != 0) return null;
@@ -110,7 +101,6 @@ public sealed class TeamIconCache : IDisposable
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         _http.Dispose();
-        // ISharedImmediateTexture is managed by Dalamud — no manual dispose needed
         _entries.Clear();
     }
 }

@@ -13,6 +13,7 @@ public class EventCacheService : IDisposable
 {
     private readonly PartakeService _partake;
     private readonly FFXIVenueService _ffxivenue;
+    private readonly SynchellService _synchell;
     private readonly Configuration _config;
     private readonly IPluginLog _log;
 
@@ -31,12 +32,13 @@ public class EventCacheService : IDisposable
     public event Action<List<VenueEvent>>? OnNewEventsDetected;
 
     public EventCacheService(PartakeService partake, FFXIVenueService ffxivenue,
-                             Configuration config, IPluginLog log)
+                             SynchellService synchell, Configuration config, IPluginLog log)
     {
-        _partake = partake;
+        _partake   = partake;
         _ffxivenue = ffxivenue;
-        _config = config;
-        _log = log;
+        _synchell  = synchell;
+        _config    = config;
+        _log       = log;
     }
 
     public void Start()
@@ -75,6 +77,10 @@ public class EventCacheService : IDisposable
                 all.AddRange(await _partake.FetchAllEventsAsync());
             if (_config.ShowFFXIVenueEvents)
                 all.AddRange(await _ffxivenue.FetchEventsAsync());
+
+            await _synchell.RefreshAsync();
+            foreach (var ev in all)
+                ev.LinkedSynchell = _synchell.FindForEvent(ev.Server, ev.LifestreamCode);
 
             var knownIds = GetKnownIds();
             var newEvents = all.Where(e => !knownIds.Contains(e.Id)).ToList();

@@ -6,6 +6,7 @@ using Dalamud.Plugin;
 using Dalamud.Interface.ImGuiNotification;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using VenueScope.Helpers;
 using VenueScope.Services;
 using VenueScope.UI;
@@ -27,11 +28,14 @@ public sealed class Plugin : IDalamudPlugin
     internal static LifestreamIPC  LifestreamIpc   { get; private set; } = null!;
     internal static PartakeService PartakeRef      { get; private set; } = null!;
 
-    // Framework.Update travel state — polls ConnectAndTravel until title screen is ready
     private static bool     _awaitingTitleScreen    = false;
     private static bool     _pendingTeleportOnLoad  = false;
     private static DateTime _lastTravelAttempt      = DateTime.MinValue;
     private static DateTime _pendingTeleportReadyAt = DateTime.MinValue;
+
+    private bool     _pendingHousingCheck = false;
+    private DateTime _housingCheckAt      = DateTime.MinValue;
+    private uint     _pendingTerritoryId  = 0;
 
     internal static void BeginPendingTravel()
     {
@@ -53,6 +57,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private readonly PartakeService      _partakeService;
     private readonly FFXIVenueService    _ffxivenueService;
+    private readonly SynchellService     _synchellService;
     private readonly EventCacheService   _cacheService;
     private readonly NotificationService _notificationService;
     private readonly TeamIconCache       _teamIconCache;
@@ -60,16 +65,21 @@ public sealed class Plugin : IDalamudPlugin
     public Plugin()
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        if (string.IsNullOrEmpty(Configuration.SynchellApiUrl))
+        {
+            Configuration.SynchellApiUrl = "https://venuescope-synchells.yunookami.workers.dev/synchells";
+            Configuration.Save();
+        }
 
         _partakeService      = new PartakeService(Log, DataManager);
         _ffxivenueService    = new FFXIVenueService(Log);
-        _cacheService        = new EventCacheService(_partakeService, _ffxivenueService, Configuration, Log);
+        _synchellService     = new SynchellService(Log, Configuration.SynchellApiUrl);
+        _cacheService        = new EventCacheService(_partakeService, _ffxivenueService, _synchellService, Configuration, Log);
         _notificationService = new NotificationService(_cacheService, Configuration, NotificationManager, Log);
         _teamIconCache       = new TeamIconCache(TextureProvider, Log);
         LifestreamIpc        = new LifestreamIPC(PluginInterface);
         PartakeRef           = _partakeService;
 
-        // Clear any stale travel pending from a prior interrupted session
         if (!string.IsNullOrEmpty(Configuration.PendingTravelCharName))
         {
             Configuration.PendingTravelCharName    = string.Empty;
@@ -79,7 +89,6 @@ public sealed class Plugin : IDalamudPlugin
         }
         EventRenderer.IconCache    = _teamIconCache;
         EventRenderer.FlagService  = _ffxivenueService;
-        // OnHideVenue set by MainWindow after construction
 
         ClientState.TerritoryChanged += OnTerritoryChanged;
         ClientState.Login            += OnLogin;
@@ -99,8 +108,8 @@ public sealed class Plugin : IDalamudPlugin
         {
             HelpMessage = "Alias for /venuescope"
         });
-
         PluginInterface.UiBuilder.Draw         += WindowSystem.Draw;
+        PluginInterface.UiBuilder.Draw         += SynchellNotifOverlay.Draw;
         PluginInterface.UiBuilder.OpenMainUi   += ToggleMainUi;
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUi;
 
@@ -116,6 +125,7 @@ public sealed class Plugin : IDalamudPlugin
         Framework.Update             -= OnFrameworkUpdate;
 
         PluginInterface.UiBuilder.Draw         -= WindowSystem.Draw;
+        PluginInterface.UiBuilder.Draw         -= SynchellNotifOverlay.Draw;
         PluginInterface.UiBuilder.OpenMainUi   -= ToggleMainUi;
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
 
@@ -130,6 +140,7 @@ public sealed class Plugin : IDalamudPlugin
         _cacheService.Dispose();
         _partakeService.Dispose();
         _ffxivenueService.Dispose();
+        _synchellService.Dispose();
         _teamIconCache.Dispose();
         LifestreamIpc.Dispose();
 
@@ -143,7 +154,6 @@ public sealed class Plugin : IDalamudPlugin
     internal static bool IsLifestreamAvailable() =>
         PluginInterface.InstalledPlugins.Any(p => p.InternalName == "Lifestream" && p.IsLoaded);
 
-    // Returns "Japan" | "North America" | "Europe" | "Oceania" for the current logged-in character, or null.
     internal static string? GetCurrentCharacterRegion()
     {
         if (ObjectTable.LocalPlayer == null) return null;
@@ -153,7 +163,6 @@ public sealed class Plugin : IDalamudPlugin
         return PartakeService.RegionList.ElementAtOrDefault(dc.Region);
     }
 
-    // Returns true if both world names belong to the same data center.
     internal static bool AreSameDC(string world1, string world2)
     {
         var s1 = PartakeRef.Servers.Values.FirstOrDefault(s => s.Name == world1);
@@ -162,7 +171,6 @@ public sealed class Plugin : IDalamudPlugin
         return s1.DataCenterId == s2.DataCenterId;
     }
 
-    // Returns the region name for a given server name, or null.
     internal static string? GetServerRegion(string serverName)
     {
         var server = PartakeRef.Servers.Values.FirstOrDefault(s => s.Name == serverName);
@@ -171,11 +179,38 @@ public sealed class Plugin : IDalamudPlugin
         return PartakeService.RegionList.ElementAtOrDefault(dc.Region);
     }
 
-    // Polls ConnectAndTravel every second after Logout() until the title screen is ready.
-    // Also handles deferred teleport execution when LocalPlayer wasn't available at TerritoryChanged time.
+    private unsafe void CheckHousingForSynchell()
+    {
+        if (!Configuration.EnableSyncshellPopup) return;
+
+        var hm = HousingManager.Instance();
+        if (hm == null) return;
+        if (hm->IndoorTerritory == null) return;
+
+        int ward = hm->GetCurrentWard() + 1;
+        int plot = hm->GetCurrentPlot() + 1;
+        if (ward <= 0 || plot <= 0 || plot > 60) return;
+
+        var player = ObjectTable.LocalPlayer;
+        if (player == null) return;
+
+        var worldId = (int)player.CurrentWorld.RowId;
+        if (!PartakeRef.Servers.TryGetValue(worldId, out var serverInfo)) return;
+
+        var synchell = _synchellService.FindByHousing(serverInfo.Name, ward, plot);
+        if (synchell == null) return;
+
+        SynchellNotifOverlay.Show(synchell);
+    }
+
     private void OnFrameworkUpdate(IFramework framework)
     {
-        // Phase 1 — wait for title screen, then trigger ConnectAndTravel
+        if (_pendingHousingCheck && DateTime.UtcNow >= _housingCheckAt)
+        {
+            _pendingHousingCheck = false;
+            CheckHousingForSynchell();
+        }
+
         if (_awaitingTitleScreen)
         {
             if (string.IsNullOrEmpty(Configuration.PendingTravelCharName)) { _awaitingTitleScreen = false; return; }
@@ -186,14 +221,12 @@ public sealed class Plugin : IDalamudPlugin
             bool ok;
             if (string.Equals(Configuration.PendingTravelDestination, Configuration.PendingTravelHomeWorld, StringComparison.OrdinalIgnoreCase))
             {
-                // Venue is on home world — just log in directly
                 ok = LifestreamIpc.ConnectAndLogin(
                     Configuration.PendingTravelCharName,
                     Configuration.PendingTravelHomeWorld);
             }
             else if (AreSameDC(Configuration.PendingTravelDestination, Configuration.PendingTravelHomeWorld))
             {
-                // Same DC, different world — log in at home world, ExecuteCommand handles same-DC world visit
                 ok = LifestreamIpc.ConnectAndTravel(
                     Configuration.PendingTravelCharName,
                     Configuration.PendingTravelHomeWorld,
@@ -202,7 +235,6 @@ public sealed class Plugin : IDalamudPlugin
             }
             else
             {
-                // Different DC — travel directly to venue's world from title screen
                 ok = LifestreamIpc.ConnectAndTravel(
                     Configuration.PendingTravelCharName,
                     Configuration.PendingTravelHomeWorld,
@@ -218,7 +250,6 @@ public sealed class Plugin : IDalamudPlugin
                 Configuration.PendingTravelHomeWorld   = string.Empty;
                 Configuration.PendingTravelDestination = string.Empty;
                 Configuration.Save();
-                // PendingVenueCode + PendingExpectedCharacter remain set — handled after login
             }
             else
             {
@@ -227,13 +258,11 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        // Phase 2 — TerritoryChanged fired but LocalPlayer was null; wait until it's available then execute
         if (_pendingTeleportOnLoad && !string.IsNullOrEmpty(Configuration.PendingVenueCode))
         {
             var player = ObjectTable.LocalPlayer;
             if (player == null) return;
 
-            // Start the 1.5s countdown the first time LocalPlayer is available
             if (_pendingTeleportReadyAt == DateTime.MinValue)
                 _pendingTeleportReadyAt = DateTime.UtcNow.AddSeconds(1.5);
 
@@ -268,7 +297,6 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
-    // Fires on character login — used as primary trigger when TerritoryChanged doesn't fire (same zone)
     private void OnLogin()
     {
         if (!string.IsNullOrEmpty(Configuration.PendingVenueCode))
@@ -278,16 +306,17 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
-    // Fires when territory finishes loading — more reliable than Login for travel commands
     private void OnTerritoryChanged(uint territoryId)
     {
+        _pendingTerritoryId  = territoryId;
+        _pendingHousingCheck = true;
+        _housingCheckAt      = DateTime.UtcNow.AddSeconds(1.5);
+
         if (string.IsNullOrEmpty(Configuration.PendingVenueCode)) return;
 
-        // Verify we're on the expected character if set
         if (!string.IsNullOrEmpty(Configuration.PendingExpectedCharacter))
         {
             var player = ObjectTable.LocalPlayer;
-            // LocalPlayer may be null on the first TerritoryChanged at login — defer to Framework.Update
             if (player == null) { _pendingTeleportOnLoad = true; return; }
 
             var homeWorldId = (int)player.HomeWorld.RowId;

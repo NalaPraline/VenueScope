@@ -28,7 +28,7 @@ public sealed class MainWindow : Window, IDisposable
     private string          _searchText     = string.Empty;
     private TimeFilter      _timeFilter     = TimeFilter.All;
     private EventSource?    _sourceFilter   = null;
-    private HashSet<string> _selectedDcKeys = new(); // empty = All Data Centers
+    private HashSet<string> _selectedDcKeys = new();
 
     private int      _shuffleSeed     = Environment.TickCount;
     private DateTime _lastSeenRefresh = DateTime.MinValue;
@@ -36,7 +36,7 @@ public sealed class MainWindow : Window, IDisposable
 
     private string   _hideBannerName  = string.Empty;
     private DateTime _hideBannerUntil = DateTime.MinValue;
-    private const float HideBannerDuration = 6f; // seconds
+    private const float HideBannerDuration = 6f;
 
     private enum TimeFilter { All = 0, LiveNow = 1, Today = 2, Upcoming = 3 }
 
@@ -50,7 +50,7 @@ public sealed class MainWindow : Window, IDisposable
     private static readonly Vector4 ColTimeUpcom = new(1.00f, 0.72f, 0.28f, 1f);
     private static readonly Vector4 ColDivider   = new(0.22f, 0.22f, 0.32f, 1f);
 
-    private const float SidebarW = 165f; // unscaled px
+    private const float SidebarW = 165f;
 
     public MainWindow(EventCacheService cache, PartakeService partake, Configuration config, Action openConfig)
         : base("VenueScope##main", ImGuiWindowFlags.None)
@@ -143,7 +143,7 @@ public sealed class MainWindow : Window, IDisposable
 
         ImGui.SetNextItemWidth(200f * gs);
         using (ImRaii.PushColor(ImGuiCol.FrameBg, new Vector4(0.14f, 0.14f, 0.20f, 1f)))
-            ImGui.InputTextWithHint("##search", "Search events...", ref _searchText, 128);
+            ImGui.InputTextWithHint("##search", "Search events and venues...", ref _searchText, 128);
 
         if (!string.IsNullOrWhiteSpace(_searchText))
         {
@@ -476,7 +476,7 @@ public sealed class MainWindow : Window, IDisposable
         float padX = 12f * gs;
         float padY = 8f  * gs;
         float lineH = ImGui.GetTextLineHeight();
-        float cardH = padY * 2f + lineH * 2f + 4f * gs; // 2 text lines + inner spacing
+        float cardH = padY * 2f + lineH * 2f + 4f * gs;
 
         var br = tl + new Vector2(w, cardH);
 
@@ -595,7 +595,6 @@ public sealed class MainWindow : Window, IDisposable
         using var child = ImRaii.Child("##evlist", Vector2.Zero, false);
         if (!child.Success) return;
 
-        // Invalidate height cache on window resize (card width affects text wrapping)
         float currentW = ImGui.GetContentRegionAvail().X;
         if (Math.Abs(currentW - _lastContentWidth) > 1f)
         {
@@ -607,7 +606,7 @@ public sealed class MainWindow : Window, IDisposable
         float windowH  = ImGui.GetWindowHeight();
         float visTop   = scrollY;
         float visBot   = scrollY + windowH;
-        float fallback = 80f * gs; // estimated height for cards not yet measured
+        float fallback = 80f * gs;
 
         var cumY = new float[searched.Count + 1];
         for (int i = 0; i < searched.Count; i++)
@@ -959,7 +958,6 @@ public sealed class MainWindow : Window, IDisposable
         var cardBR = new Vector2(cardTL.X + cardW, ImGui.GetCursorScreenPos().Y);
         dl.ChannelsSetCurrent(0);
 
-        // Subtle green tint on the card when live
         var bgColor     = anyLive ? new Vector4(0.10f, 0.16f, 0.14f, 1.00f) : colCardBg;
         var accentColor = anyLive ? ColTimeLive : srcColor;
         dl.AddRectFilled(cardTL, cardBR, ImGui.ColorConvertFloat4ToU32(bgColor), 6f * gs);
@@ -979,7 +977,7 @@ public sealed class MainWindow : Window, IDisposable
             if (icon.Width > 0 && icon.Height > 0)
             {
                 float imgAspect = (float)icon.Width / icon.Height;
-                if (imgAspect > 1f) // wider than tall → crop sides
+                if (imgAspect > 1f)
                 {
                     float crop   = 1f / imgAspect;
                     float offset = (1f - crop) * 0.5f;
@@ -1083,7 +1081,6 @@ public sealed class MainWindow : Window, IDisposable
                 ? !_config.HiddenVenueIds.Contains(e.Id)
                 : !(e.TeamId > 0 && _config.HiddenPartakeTeamIds.Contains(e.TeamId)));
 
-        // Reroll shuffle seed each time the cache is refreshed
         if (_cache.LastRefresh != _lastSeenRefresh)
         {
             _lastSeenRefresh = _cache.LastRefresh;
@@ -1102,7 +1099,6 @@ public sealed class MainWindow : Window, IDisposable
         return list;
     }
 
-    // 0 = live now · 1 = opening within 2h · 2 = everything else
     private static int GetSortGroup(VenueEvent e)
     {
         var now   = DateTime.UtcNow;

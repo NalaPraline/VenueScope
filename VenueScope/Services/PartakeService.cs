@@ -18,7 +18,6 @@ public class PartakeService : IDisposable
     private readonly GraphQLHttpClient _graphQL;
     private readonly IPluginLog        _log;
 
-    // 1=Japan, 2=NA, 3=Europe, 4=Oceania
     public static readonly List<string> RegionList = ["Unknown", "Japan", "North America", "Europe", "Oceania"];
 
     public readonly Dictionary<int, DataCenterInfo> DataCenters = new();
@@ -50,7 +49,6 @@ public class PartakeService : IDisposable
             foreach (var wg in worldGroups)
             {
                 var name = wg.Name.ExtractText();
-                // region 7 = cloud/dev DCs
                 if (name != "Dev" && name != "Shadow" && wg.Region.RowId != 7)
                     DataCenters[(int)wg.RowId] = new DataCenterInfo((int)wg.RowId, name, (int)wg.Region.RowId);
             }
@@ -109,7 +107,6 @@ public class PartakeService : IDisposable
             }
         }
 
-        // active events are a subset of upcoming, deduplicate
         var before = result.Count;
         var deduped = result.DistinctBy(e => e.Id).ToList();
         _log.Debug($"[Partake] Fetched {deduped.Count} events ({before - deduped.Count} duplicates removed).");
@@ -248,7 +245,7 @@ public class PartakeService : IDisposable
         {
             char c = s[i];
 
-            if (c >= '\uFF01' && c <= '\uFF5E') // fullwidth ASCII → regular ASCII
+            if (c >= '\uFF01' && c <= '\uFF5E')
             {
                 sb.Append((char)(c - 0xFF01 + 0x21));
                 continue;
@@ -274,36 +271,36 @@ public class PartakeService : IDisposable
     {
         ReadOnlySpan<int> upperBases =
         [
-            0x1D400, // Bold
-            0x1D434, // Italic
-            0x1D468, // Bold Italic
-            0x1D49C, // Script
-            0x1D4D0, // Bold Script
-            0x1D504, // Fraktur
-            0x1D538, // Double-Struck
-            0x1D56C, // Bold Fraktur
-            0x1D5A0, // Sans-Serif
-            0x1D5D4, // Sans-Serif Bold
-            0x1D608, // Sans-Serif Italic
-            0x1D63C, // Sans-Serif Bold Italic
-            0x1D670, // Monospace
+            0x1D400,
+            0x1D434,
+            0x1D468,
+            0x1D49C,
+            0x1D4D0,
+            0x1D504,
+            0x1D538,
+            0x1D56C,
+            0x1D5A0,
+            0x1D5D4,
+            0x1D608,
+            0x1D63C,
+            0x1D670,
         ];
 
         ReadOnlySpan<int> lowerBases =
         [
-            0x1D41A, // Bold
-            0x1D44E, // Italic
-            0x1D482, // Bold Italic
-            0x1D4B6, // Script
-            0x1D4EA, // Bold Script
-            0x1D51E, // Fraktur
-            0x1D552, // Double-Struck
-            0x1D586, // Bold Fraktur
-            0x1D5BA, // Sans-Serif
-            0x1D5EE, // Sans-Serif Bold
-            0x1D622, // Sans-Serif Italic
-            0x1D656, // Sans-Serif Bold Italic
-            0x1D68A, // Monospace
+            0x1D41A,
+            0x1D44E,
+            0x1D482,
+            0x1D4B6,
+            0x1D4EA,
+            0x1D51E,
+            0x1D552,
+            0x1D586,
+            0x1D5BA,
+            0x1D5EE,
+            0x1D622,
+            0x1D656,
+            0x1D68A,
         ];
 
         foreach (int b in upperBases)
@@ -333,12 +330,9 @@ public class PartakeService : IDisposable
 
         var ri = System.Text.RegularExpressions.RegexOptions.IgnoreCase;
 
-        // Strip EU- region prefix
         raw = System.Text.RegularExpressions.Regex.Replace(raw.Trim(), @"^EU-?\s*", "", ri);
-        // Strip known DC name prefix (optional brackets)
         raw = System.Text.RegularExpressions.Regex.Replace(raw,
             @"^\[?(Light|Chaos|Moogle|Elemental|Meteor|Gaia|Mana|Aether|Crystal|Primal|Dynamis|Materia)\]?\s*[-|]?\s*", "", ri);
-        // Strip server name if it now appears at start
         if (!string.IsNullOrEmpty(serverNameFromApi))
             raw = System.Text.RegularExpressions.Regex.Replace(raw,
                 @"^" + System.Text.RegularExpressions.Regex.Escape(serverNameFromApi) + @"\b\s*[-|]?\s*", "", ri);
@@ -382,7 +376,6 @@ public class PartakeService : IDisposable
 
                     if (tailEndsWithServer)
                     {
-                        // e.g. "Goblet W8 P12 | Mateus" → "Mateus Goblet W8 P12"
                         string locationPart = StripTrailingServer(tail, lastPart);
                         result = string.IsNullOrEmpty(locationPart)
                             ? $"{serverNameFromApi} {first}"
@@ -420,10 +413,8 @@ public class PartakeService : IDisposable
     {
         var ri = System.Text.RegularExpressions.RegexOptions.IgnoreCase;
 
-        // Unicode decorative separators → space
         s = System.Text.RegularExpressions.Regex.Replace(s, @"[♥•★☆◆❤♦]\s*", " ");
 
-        // District normalizations (order matters: specific before generic)
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bLav\.?\s*Beds?\.?\b", "Lavender Beds", ri);
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bLavender Beds?\b",    "Lavender Beds", ri);
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bLB\b",                "Lavender Beds", ri);
@@ -435,17 +426,16 @@ public class PartakeService : IDisposable
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bShirogane\b",         "Shirogane",     ri);
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bLouisiox\b",          "Louisoix",      ri);
 
-        // Ward/Plot case normalization (handles ALL-CAPS)
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bWard\b", "Ward", ri);
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bPlot\b", "Plot", ri);
 
-        // W##-P## or W##/P## → W## P##
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bW(\d+)[-]P(\d+)\b", "W$1 P$2", ri);
-        // W##P## concatenated → W## P##
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bW(\d+)P(\d+)\b",    "W$1 P$2", ri);
-        // lowercase w## p## → W## P##
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bw(\d+)\b", "W$1");
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\bp(\d+)\b", "P$1");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\b(\d{1,2})\s*-\s*(\d{1,2})\b", "W$1 P$2", ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bApt\s*(\d+)\b",  "A$1", ri);
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\bRoom\s*(\d+)\b", "A$1", ri);
 
         var sb = new StringBuilder(s.Length);
         bool lastWasSpace = false;

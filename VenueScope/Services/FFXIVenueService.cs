@@ -142,7 +142,6 @@ public class FFXIVenueService : IDisposable
 
                 var ovEndStr = ov["end"]?.ToString();
                 if (DateTimeOffset.TryParse(ovEndStr, out var ovEnd) && ovEnd < DateTimeOffset.UtcNow) continue;
-                // no end time + past start = unknown duration, skip
                 if (string.IsNullOrEmpty(ovEndStr) && s < DateTimeOffset.UtcNow) continue;
 
                 if (s < start)
@@ -197,10 +196,9 @@ public class FFXIVenueService : IDisposable
             var parts = new List<string> { world };
             if (!string.IsNullOrEmpty(district)) parts.Add(district);
             parts.Add($"W{ward}");
-            // "Sub" omitted: Lifestream doesn't handle it
             if (plot is > 0)       parts.Add($"P{plot}");
-            else if (apt is > 0)   parts.Add($"Apt{apt}");
-            if (room is > 0)       parts.Add($"R{room}");
+            else if (apt is > 0)   parts.Add($"A{apt}");
+            if (room is > 0)       parts.Add($"A{room}");
             return string.Join(" ", parts);
         }
 

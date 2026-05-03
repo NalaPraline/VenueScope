@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Migrate to Dalamud API 15 / FFXIV 7.5. Description section now shows team info for Partake events. Reworked description rendering: strip markdown, cleaner output, no empty sections. Location parser improvements: Unicode separators, LB alias, DC prefix stripping, W##-P## notation, Empereum typo fix."
+          changelog: "Add syncshell support: housing venues now show a Syncshell button with IDs and passwords to copy. A popup appears automatically when you enter a venue that has one."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

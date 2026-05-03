@@ -29,7 +29,6 @@ public class LifestreamIPC : IDisposable
         catch { return false; }
     }
 
-    // Returns 0 (Success) or a non-zero ErrorCode. Only works from in-game.
     public int Logout()
     {
         try   { return _logout.InvokeFunc(); }
@@ -46,8 +45,6 @@ public class LifestreamIPC : IDisposable
         catch (Exception e) { Plugin.Log.Warning($"[LifestreamIPC] ExecuteCommand failed: {e.Message}"); }
     }
 
-    // From in-game: logs out current character, navigates to charHomeWorld's DC chara select,
-    // initiates DC travel to destination world, then logs in. Returns ErrorCode as int (0 = Success).
     public bool ChangeCharacter(string name, string world)
     {
         try
@@ -64,8 +61,6 @@ public class LifestreamIPC : IDisposable
         }
     }
 
-    // From title screen: navigate to charHomeWorld's DC chara select, travel to destination world,
-    // then login (noLogin=false) or just travel without logging in (noLogin=true).
     public bool ConnectAndTravel(string charName, string charHomeWorld, string destination, bool noLogin)
     {
         try   { return _connectAndTravel.InvokeFunc(charName, charHomeWorld, destination, noLogin); }
@@ -76,8 +71,6 @@ public class LifestreamIPC : IDisposable
         }
     }
 
-    // From title screen: navigate to charHomeWorld's DC chara select and log in directly.
-    // After login, ExecuteCommand handles world travel + house TP via PendingVenueCode.
     public bool ConnectAndLogin(string charName, string charHomeWorld)
     {
         try   { return _connectAndLogin.InvokeFunc(charName, charHomeWorld); }

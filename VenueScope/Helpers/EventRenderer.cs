@@ -57,7 +57,6 @@ public static class EventRenderer
         return s.Trim();
     }
 
-    // one popup at a time — flag
     private static string _flagVenueId  = string.Empty;
     private static int    _flagCategory = 0;
     private static string _flagDesc     = string.Empty;
@@ -71,21 +70,20 @@ public static class EventRenderer
 
     private static readonly Vector4[] TagPalette =
     [
-        new(0.96f, 0.45f, 0.45f, 1f), // coral
-        new(0.96f, 0.68f, 0.24f, 1f), // amber
-        new(0.40f, 0.88f, 0.52f, 1f), // mint
-        new(0.24f, 0.82f, 0.94f, 1f), // cyan
-        new(0.66f, 0.50f, 1.00f, 1f), // lavender
-        new(0.96f, 0.48f, 0.78f, 1f), // pink
-        new(0.42f, 0.72f, 1.00f, 1f), // sky blue
-        new(0.94f, 0.88f, 0.28f, 1f), // yellow
-        new(0.92f, 0.58f, 0.28f, 1f), // orange
-        new(0.42f, 0.94f, 0.80f, 1f), // turquoise
+        new(0.96f, 0.45f, 0.45f, 1f),
+        new(0.96f, 0.68f, 0.24f, 1f),
+        new(0.40f, 0.88f, 0.52f, 1f),
+        new(0.24f, 0.82f, 0.94f, 1f),
+        new(0.66f, 0.50f, 1.00f, 1f),
+        new(0.96f, 0.48f, 0.78f, 1f),
+        new(0.42f, 0.72f, 1.00f, 1f),
+        new(0.94f, 0.88f, 0.28f, 1f),
+        new(0.92f, 0.58f, 0.28f, 1f),
+        new(0.42f, 0.94f, 0.80f, 1f),
     ];
 
     public static Vector4 GetTagColor(string tag)
     {
-        // GetHashCode is randomized per-session in .NET 5+
         unchecked
         {
             int h = 17;
@@ -118,7 +116,6 @@ public static class EventRenderer
         float thumbGap  = ThumbGap * gs;
         float indent    = padX + thumbW + thumbGap;
 
-        // ch1 = foreground (ImGui widgets), ch0 = background (DrawList)
         dl.ChannelsSplit(2);
         dl.ChannelsSetCurrent(1);
 
@@ -166,7 +163,6 @@ public static class EventRenderer
         var icon = GetIcon(ev);
         if (icon != null)
         {
-            // center-crop if the image is wider than the box
             var uv0 = Vector2.Zero;
             var uv1 = Vector2.One;
             if (icon.Width > 0 && icon.Height > 0)
@@ -266,7 +262,6 @@ public static class EventRenderer
             }
         }
 
-        // FFXIVenue managers are Discord snowflake IDs, skip
         if (ev.Source == EventSource.Partake && !string.IsNullOrEmpty(ev.Host))
         {
             Dot();
@@ -371,7 +366,6 @@ public static class EventRenderer
                 (trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
                  trimmed.StartsWith("http://",  StringComparison.OrdinalIgnoreCase)))
             {
-                // skip image attachment URLs
                 var tl = trimmed.ToLowerInvariant();
                 if (tl.EndsWith(".png") || tl.EndsWith(".jpg") || tl.EndsWith(".jpeg") ||
                     tl.EndsWith(".gif") || tl.EndsWith(".webp")) continue;
@@ -406,19 +400,16 @@ public static class EventRenderer
         if (HasVisibleContent(ev.Description))
             DrawDescriptionContent(ev.Description);
 
-        if (!string.IsNullOrEmpty(ev.EventUrl))
+        using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.80f, 0.65f, 0.20f, 1f)))
+            ImGui.TextWrapped("Descriptions may not display correctly. View the full event on Partake for accurate formatting.");
+        if (ImGui.IsItemHovered() && !string.IsNullOrEmpty(ev.EventUrl))
         {
-            using (ImRaii.PushColor(ImGuiCol.Text, ColDescLink))
-                ImGui.TextUnformatted("View full event description on Partake →");
-            if (ImGui.IsItemHovered())
-            {
-                ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-                ImGui.SetTooltip(ev.EventUrl);
-            }
-            if (ImGui.IsItemClicked())
-                Util.OpenLink(ev.EventUrl);
-            ImGui.Spacing();
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            ImGui.SetTooltip(ev.EventUrl);
         }
+        if (ImGui.IsItemClicked() && !string.IsNullOrEmpty(ev.EventUrl))
+            Util.OpenLink(ev.EventUrl);
+        ImGui.Spacing();
     }
 
     private static bool HasVisibleContent(string text)
@@ -450,6 +441,11 @@ public static class EventRenderer
     private static readonly Vector4 ColFavOn  = new(1.00f, 0.82f, 0.14f, 1f);
     private static readonly Vector4 ColFavOff = new(0.44f, 0.44f, 0.52f, 1f);
 
+    private static readonly System.Text.RegularExpressions.Regex _wardRx = new(@"\bW(?:ard\s+)?\d+\b", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static readonly System.Text.RegularExpressions.Regex _plotRx = new(@"\bP(?:lot\s+)?\d+\b", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static bool IsHousingLocation(string code) =>
+        !string.IsNullOrEmpty(code) && _wardRx.IsMatch(code) && _plotRx.IsMatch(code);
+
     private static float CalcActionsWidth(VenueEvent ev)
     {
         float gs  = ImGuiHelpers.GlobalScale;
@@ -458,6 +454,7 @@ public static class EventRenderer
         w += 52f * gs + spc;
         if (!string.IsNullOrEmpty(ev.EventUrl) || !string.IsNullOrEmpty(ev.DiscordUrl) || !string.IsNullOrEmpty(ev.WebsiteUrl) || !string.IsNullOrEmpty(ev.InstagramUrl)) w += 52f * gs + spc;
         if (!string.IsNullOrEmpty(ev.LifestreamCode)) w += 90f * gs + spc;
+        if (ev.LinkedSynchell != null || IsHousingLocation(ev.LifestreamCode)) w += 60f * gs + spc;
         w += 32f * gs + spc;
         return w;
     }
@@ -627,7 +624,8 @@ public static class EventRenderer
 
         if (!string.IsNullOrEmpty(ev.LifestreamCode))
         {
-            bool lsAvail = Plugin.IsLifestreamAvailable();
+            bool lsAvail   = Plugin.IsLifestreamAvailable();
+            string lsCode  = ev.LifestreamCode;
             using var c1 = ImRaii.PushColor(ImGuiCol.Button,        lsAvail ? new Vector4(0.18f, 0.36f, 0.22f, 0.65f) : new Vector4(0.28f, 0.20f, 0.20f, 0.65f));
             using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, lsAvail ? new Vector4(0.24f, 0.52f, 0.30f, 0.90f) : new Vector4(0.40f, 0.26f, 0.26f, 0.90f));
             using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  lsAvail ? new Vector4(0.30f, 0.64f, 0.38f, 1.00f) : new Vector4(0.50f, 0.32f, 0.32f, 1.00f));
@@ -639,15 +637,13 @@ public static class EventRenderer
                     string venueRegion   = Plugin.GetServerRegion(ev.Server) ?? string.Empty;
                     string currentRegion = Plugin.GetCurrentCharacterRegion() ?? venueRegion;
 
-                    // OCE is reachable via DC travel from any region — no character switch needed
                     bool needsSwitch = venueRegion != currentRegion
                                     && !string.IsNullOrEmpty(venueRegion)
                                     && venueRegion != "Oceania";
 
                     if (!needsSwitch)
                     {
-                        // TP directly via IPC — LifestreamCode already includes the world name
-                        Plugin.LifestreamIpc.ExecuteCommand(ev.LifestreamCode);
+                        Plugin.LifestreamIpc.ExecuteCommand(lsCode);
                     }
                     else if (needsSwitch && config.CharacterPerRegion.TryGetValue(venueRegion, out var charEntry)
                              && !string.IsNullOrEmpty(charEntry))
@@ -663,7 +659,7 @@ public static class EventRenderer
                             config.PendingVenueServer        = string.Empty;
                             config.PendingTravelCharName     = charName;
                             config.PendingTravelHomeWorld    = charWorld;
-                            config.PendingTravelDestination  = ev.Server; // world name only
+                            config.PendingTravelDestination  = ev.Server;
                             config.Save();
 
                             Plugin.Log.Information($"Logging out to switch to {charName}@{charWorld} for {venueRegion} venue ({ev.Server})");
@@ -677,7 +673,7 @@ public static class EventRenderer
                             {
                                 Title   = ok ? $"Switching to {charName}" : "Switch failed",
                                 Content = ok
-                                    ? $"Logging out — will travel to {ev.Server} on login."
+                                    ? $"Logging out. Will travel to {ev.Server} on login."
                                     : "Lifestream could not log out. Make sure Lifestream is loaded.",
                                 Type    = ok ? NotificationType.Info : NotificationType.Error,
                             });
@@ -705,7 +701,29 @@ public static class EventRenderer
             }
             if (ImGui.IsItemHovered())
             {
-                ImGui.SetTooltip(lsAvail ? $"Teleport: {ev.LifestreamCode}" : "Lifestream is not installed, click for details");
+                ImGui.SetTooltip(lsAvail
+                    ? $"Teleport: {lsCode}"
+                    : "Lifestream is not installed, click for details");
+            }
+        }
+
+        if (IsHousingLocation(ev.LifestreamCode))
+        {
+            ImGui.SameLine(0, 4);
+            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.34f, 0.12f, 0.54f, 0.65f));
+            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.46f, 0.18f, 0.72f, 0.90f));
+            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.56f, 0.22f, 0.86f, 1.00f));
+            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.84f, 0.64f, 1.00f, 1.00f));
+            if (ImGui.SmallButton($" Syncshell##{ev.Id}cwls"))
+                ImGui.OpenPopup($"##cwls{ev.Id}");
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Syncshell");
+
+            ImGui.SetNextWindowSize(new Vector2(300f * ImGuiHelpers.GlobalScale, 0f));
+            using (ImRaii.PushColor(ImGuiCol.PopupBg, new Vector4(0.11f, 0.11f, 0.18f, 1f)))
+            if (ImGui.BeginPopup($"##cwls{ev.Id}"))
+            {
+                DrawCwlsPopupContent(ev.LinkedSynchell, ev.Id);
+                ImGui.EndPopup();
             }
         }
 
@@ -730,6 +748,81 @@ public static class EventRenderer
         else
         {
             ImGui.Dummy(new Vector2(32f * ImGuiHelpers.GlobalScale, 1f));
+        }
+    }
+
+    private static void DrawCwlsPopupContent(Models.SynchellEntry? synchell, string evId)
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+
+        if (synchell == null)
+        {
+            ImGui.Separator();
+            ImGui.Spacing();
+            using (ImRaii.PushColor(ImGuiCol.Text, ColMuted))
+                ImGui.TextWrapped("No syncshell registered for this venue.");
+            ImGui.Spacing();
+            using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.78f, 0.78f, 0.86f, 1f)))
+                ImGui.TextWrapped("Are you the owner? Contact me to add yours!");
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+            using var d1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.22f, 0.26f, 0.60f, 0.80f));
+            using var d2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.32f, 0.36f, 0.78f, 0.95f));
+            using var d3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.40f, 0.44f, 0.90f, 1.00f));
+            using var d4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.80f, 0.84f, 1.00f, 1.00f));
+            if (ImGui.Button($"  Contact on Discord  ##cwlsadd{evId}"))
+                Util.OpenLink("https://discordid.netlify.app/?id=249633834646241281");
+            ImGui.Spacing();
+            return;
+        }
+
+        using (ImRaii.PushColor(ImGuiCol.Text, ColTitle))
+            ImGui.TextUnformatted(synchell.VenueName);
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        int i = 0;
+        foreach (var ch in synchell.Channels)
+        {
+            if (i > 0) ImGui.Separator();
+            ImGui.Spacing();
+
+            using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.84f, 0.64f, 1.00f, 1f)))
+                ImGui.TextUnformatted(ch.Name);
+
+            ImGui.Spacing();
+
+            using var b1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.18f, 0.18f, 0.28f, 0.70f));
+            using var b2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.28f, 0.28f, 0.42f, 0.90f));
+            using var b3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.36f, 0.36f, 0.54f, 1.00f));
+
+            if (!string.IsNullOrEmpty(ch.Id))
+            {
+                using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.70f, 0.70f, 0.80f, 1f)))
+                    ImGui.TextUnformatted("ID");
+                ImGui.SameLine(0, 6);
+                using (ImRaii.PushColor(ImGuiCol.Text, ColTitle))
+                    ImGui.TextUnformatted(ch.Id);
+                ImGui.SameLine(0, 8);
+                if (ImGui.SmallButton($" Copy ##cwlsn{evId}{i}"))
+                    ImGui.SetClipboardText(ch.Id);
+            }
+
+            if (!string.IsNullOrEmpty(ch.Password))
+            {
+                using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.70f, 0.70f, 0.80f, 1f)))
+                    ImGui.TextUnformatted("Pass");
+                ImGui.SameLine(0, 6);
+                using (ImRaii.PushColor(ImGuiCol.Text, ColTitle))
+                    ImGui.TextUnformatted(ch.Password);
+                ImGui.SameLine(0, 8);
+                if (ImGui.SmallButton($" Copy ##cwlsp{evId}{i}"))
+                    ImGui.SetClipboardText(ch.Password);
+            }
+
+            ImGui.Spacing();
+            i++;
         }
     }
 
