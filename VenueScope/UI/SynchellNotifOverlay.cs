@@ -65,7 +65,7 @@ public static class SynchellNotifOverlay
         using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0f, 0f, 0f, 0f)))
         using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.20f, 0.20f, 0.30f, 0.60f)))
         {
-            if (ImGui.SmallButton("X##snclose")) _current = null;
+            if (ImGui.SmallButton("X##snclose")) { _current = null; ImGui.End(); return; }
         }
 
         ImGui.Separator();

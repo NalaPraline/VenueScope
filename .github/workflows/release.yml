@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Add syncshell support: housing venues now show a Syncshell button with IDs and passwords to copy. A popup appears automatically when you enter a venue that has one."
+          changelog: "Fix crash when dismissing the syncshell popup. ty rey"
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
