@@ -20,6 +20,7 @@ public class EventCacheService : IDisposable
     private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly CancellationTokenSource _cts = new();
     private Task? _bgTask;
+    private Task? _synchellTask;
 
     public List<VenueEvent> CachedEvents { get; private set; } = new();
     public Dictionary<string, List<VenueEvent>> EventsByDc { get; private set; } = new();
@@ -43,7 +44,8 @@ public class EventCacheService : IDisposable
 
     public void Start()
     {
-        _bgTask = Task.Run(BackgroundLoop, _cts.Token);
+        _bgTask      = Task.Run(BackgroundLoop,   _cts.Token);
+        _synchellTask = Task.Run(SynchellLoop,    _cts.Token);
         _log.Debug("[Cache] Auto-refresh started.");
     }
 
@@ -61,6 +63,23 @@ public class EventCacheService : IDisposable
             }
             catch (TaskCanceledException) { break; }
             catch (Exception ex) { _log.Error($"[Cache] Background loop error: {ex.Message}"); }
+        }
+    }
+
+    private async Task SynchellLoop()
+    {
+        while (!_cts.Token.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(60), _cts.Token);
+                await _synchell.RefreshAsync();
+                await _lock.WaitAsync();
+                try { foreach (var ev in CachedEvents) ev.LinkedSynchell = _synchell.FindForEvent(ev.Server, ev.LifestreamCode); }
+                finally { _lock.Release(); }
+            }
+            catch (TaskCanceledException) { break; }
+            catch (Exception ex) { _log.Warning($"[Synchell] Loop error: {ex.Message}"); }
         }
     }
 
@@ -140,7 +159,7 @@ public class EventCacheService : IDisposable
     public void Dispose()
     {
         _cts.Cancel();
-        try { _bgTask?.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        try { Task.WaitAll([_bgTask!, _synchellTask!], TimeSpan.FromSeconds(2)); } catch { }
         _cts.Dispose();
         _lock.Dispose();
     }

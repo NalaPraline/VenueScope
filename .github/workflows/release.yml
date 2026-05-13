@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Fix crash when dismissing the syncshell popup. ty rey"
+          changelog: "Fix syncshell district matching for FFXIV Venues; syncshell data now auto-refreshes every minute"
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

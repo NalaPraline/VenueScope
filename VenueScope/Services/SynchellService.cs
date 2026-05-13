@@ -19,7 +19,7 @@ public class SynchellService : IDisposable
 
     private static readonly Regex WardRx     = new(@"\bW(?:ard\s+)?(\d+)\b",                          RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex PlotRx     = new(@"\bP(?:lot\s+)?(\d+)\b",                          RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex DistrictRx = new(@"\b(Mist|Lavender Beds|The Goblet|Shirogane|Empyreum)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex DistrictRx = new(@"\b(Mist|Lavender Beds|(?:The )?Goblet|Shirogane|Empyreum)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public SynchellService(IPluginLog log, string apiUrl)
     {
@@ -64,7 +64,7 @@ public class SynchellService : IDisposable
         int plot = int.Parse(pm.Groups[1].Value);
 
         var dm       = DistrictRx.Match(lifestreamCode);
-        string district = dm.Success ? dm.Value.ToLowerInvariant() : string.Empty;
+        string district = dm.Success ? (dm.Value.Equals("Goblet", StringComparison.OrdinalIgnoreCase) ? "the goblet" : dm.Value.ToLowerInvariant()) : string.Empty;
 
         if (!string.IsNullOrEmpty(district) &&
             _index.TryGetValue((server.ToLowerInvariant(), district, ward, plot), out var entry))
