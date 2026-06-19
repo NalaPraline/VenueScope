@@ -28,6 +28,7 @@ public class Configuration : IPluginConfiguration
 
     public bool ShowPartakeEvents   { get; set; } = true;
     public bool ShowFFXIVenueEvents { get; set; } = true;
+    public bool ShowSpotlight       { get; set; } = true;
 
     public int RefreshIntervalMinutes { get; set; } = 5;
 
@@ -63,6 +64,8 @@ public class Configuration : IPluginConfiguration
     public List<string> FavoriteServers     { get; set; } = new();
 
     public string SynchellApiUrl { get; set; } = "https://venuescope-synchells.yunookami.workers.dev/synchells";
+
+    public string SpotlightApiUrl { get; set; } = "https://venuescope-synchells.yunookami.workers.dev/spotlights";
 
     [NonSerialized] public bool SelectedRegionSet     = false;
     [NonSerialized] public bool SelectedDataCenterSet = false;

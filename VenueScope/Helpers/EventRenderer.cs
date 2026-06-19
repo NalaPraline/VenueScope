@@ -256,7 +256,7 @@ public static class EventRenderer
                         ImGuiSelectableFlags.None, new Vector2(locW, 0)))
                     ImGui.SetClipboardText(string.IsNullOrEmpty(cached.ServerDc)
                         ? cached.Location
-                        : $"{cached.ServerDc} – {cached.Location}");
+                        : $"{cached.ServerDc} - {cached.Location}");
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip("Click to copy location");
             }
@@ -631,74 +631,7 @@ public static class EventRenderer
             using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  lsAvail ? new Vector4(0.30f, 0.64f, 0.38f, 1.00f) : new Vector4(0.50f, 0.32f, 0.32f, 1.00f));
             using var c4 = ImRaii.PushColor(ImGuiCol.Text,          lsAvail ? new Vector4(0.62f, 1.00f, 0.70f, 1.00f) : new Vector4(0.80f, 0.50f, 0.50f, 1.00f));
             if (ImGui.SmallButton($" Teleport ##{ev.Id}"))
-            {
-                if (lsAvail)
-                {
-                    string venueRegion   = Plugin.GetServerRegion(ev.Server) ?? string.Empty;
-                    string currentRegion = Plugin.GetCurrentCharacterRegion() ?? venueRegion;
-
-                    bool needsSwitch = venueRegion != currentRegion
-                                    && !string.IsNullOrEmpty(venueRegion)
-                                    && venueRegion != "Oceania";
-
-                    if (!needsSwitch)
-                    {
-                        Plugin.LifestreamIpc.ExecuteCommand(lsCode);
-                    }
-                    else if (needsSwitch && config.CharacterPerRegion.TryGetValue(venueRegion, out var charEntry)
-                             && !string.IsNullOrEmpty(charEntry))
-                    {
-                        var parts = charEntry.Split('@', 2);
-                        if (parts.Length == 2)
-                        {
-                            string charName  = parts[0].Trim();
-                            string charWorld = parts[1].Trim();
-
-                            config.PendingVenueCode          = ev.LifestreamCode;
-                            config.PendingExpectedCharacter  = $"{charName}@{charWorld}";
-                            config.PendingVenueServer        = string.Empty;
-                            config.PendingTravelCharName     = charName;
-                            config.PendingTravelHomeWorld    = charWorld;
-                            config.PendingTravelDestination  = ev.Server;
-                            config.Save();
-
-                            Plugin.Log.Information($"Logging out to switch to {charName}@{charWorld} for {venueRegion} venue ({ev.Server})");
-                            int errCode = Plugin.LifestreamIpc.Logout();
-                            bool ok = errCode == 0;
-
-                            if (ok)
-                                Plugin.BeginPendingTravel();
-
-                            Plugin.NotificationManager.AddNotification(new Notification
-                            {
-                                Title   = ok ? $"Switching to {charName}" : "Switch failed",
-                                Content = ok
-                                    ? $"Logging out. Will travel to {ev.Server} on login."
-                                    : "Lifestream could not log out. Make sure Lifestream is loaded.",
-                                Type    = ok ? NotificationType.Info : NotificationType.Error,
-                            });
-                        }
-                    }
-                    else
-                    {
-                        Plugin.NotificationManager.AddNotification(new Notification
-                        {
-                            Title   = "No character configured",
-                            Content = $"This venue is in {venueRegion}. Configure a character for that region in Settings → Characters.",
-                            Type    = NotificationType.Warning,
-                        });
-                    }
-                }
-                else
-                {
-                    Plugin.NotificationManager.AddNotification(new Notification
-                    {
-                        Title   = "Lifestream not installed",
-                        Content = "The Lifestream plugin is required for in-game teleport. Please install it via the Dalamud plugin installer.",
-                        Type    = NotificationType.Warning,
-                    });
-                }
-            }
+                RequestTeleport(ev.Server, lsCode, config);
             if (ImGui.IsItemHovered())
             {
                 ImGui.SetTooltip(lsAvail
@@ -915,6 +848,77 @@ public static class EventRenderer
 
         ImGui.Spacing();
         ImGui.EndPopup();
+    }
+
+    public static void RequestTeleport(string server, string lifestreamCode, Configuration config)
+    {
+        if (string.IsNullOrEmpty(lifestreamCode)) return;
+
+        if (!Plugin.IsLifestreamAvailable())
+        {
+            Plugin.NotificationManager.AddNotification(new Notification
+            {
+                Title   = "Lifestream not installed",
+                Content = "The Lifestream plugin is required for in-game teleport. Please install it via the Dalamud plugin installer.",
+                Type    = NotificationType.Warning,
+            });
+            return;
+        }
+
+        string venueRegion   = Plugin.GetServerRegion(server) ?? string.Empty;
+        string currentRegion = Plugin.GetCurrentCharacterRegion() ?? venueRegion;
+
+        bool needsSwitch = venueRegion != currentRegion
+                        && !string.IsNullOrEmpty(venueRegion)
+                        && venueRegion != "Oceania";
+
+        if (!needsSwitch)
+        {
+            Plugin.LifestreamIpc.ExecuteCommand(lifestreamCode);
+            return;
+        }
+
+        if (config.CharacterPerRegion.TryGetValue(venueRegion, out var charEntry) && !string.IsNullOrEmpty(charEntry))
+        {
+            var parts = charEntry.Split('@', 2);
+            if (parts.Length != 2) return;
+
+            string charName  = parts[0].Trim();
+            string charWorld = parts[1].Trim();
+
+            config.PendingVenueCode          = lifestreamCode;
+            config.PendingExpectedCharacter  = $"{charName}@{charWorld}";
+            config.PendingVenueServer        = string.Empty;
+            config.PendingTravelCharName     = charName;
+            config.PendingTravelHomeWorld    = charWorld;
+            config.PendingTravelDestination  = server;
+            config.Save();
+
+            Plugin.Log.Information($"Logging out to switch to {charName}@{charWorld} for {venueRegion} venue ({server})");
+            int errCode = Plugin.LifestreamIpc.Logout();
+            bool ok = errCode == 0;
+
+            if (ok)
+                Plugin.BeginPendingTravel();
+
+            Plugin.NotificationManager.AddNotification(new Notification
+            {
+                Title   = ok ? $"Switching to {charName}" : "Switch failed",
+                Content = ok
+                    ? $"Logging out. Will travel to {server} on login."
+                    : "Lifestream could not log out. Make sure Lifestream is loaded.",
+                Type    = ok ? NotificationType.Info : NotificationType.Error,
+            });
+        }
+        else
+        {
+            Plugin.NotificationManager.AddNotification(new Notification
+            {
+                Title   = "No character configured",
+                Content = $"This venue is in {venueRegion}. Configure a character for that region in Settings then Characters.",
+                Type    = NotificationType.Warning,
+            });
+        }
     }
 
     private static void Dot()

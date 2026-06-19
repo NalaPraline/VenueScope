@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Fix syncshell district matching for FFXIV Venues; syncshell data now auto-refreshes every minute"
+          changelog: "Added a Spotlight banner that highlights featured venues."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

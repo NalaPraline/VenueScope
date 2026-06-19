@@ -14,6 +14,7 @@ public class EventCacheService : IDisposable
     private readonly PartakeService _partake;
     private readonly FFXIVenueService _ffxivenue;
     private readonly SynchellService _synchell;
+    private readonly SpotlightService _spotlight;
     private readonly Configuration _config;
     private readonly IPluginLog _log;
 
@@ -33,11 +34,13 @@ public class EventCacheService : IDisposable
     public event Action<List<VenueEvent>>? OnNewEventsDetected;
 
     public EventCacheService(PartakeService partake, FFXIVenueService ffxivenue,
-                             SynchellService synchell, Configuration config, IPluginLog log)
+                             SynchellService synchell, SpotlightService spotlight,
+                             Configuration config, IPluginLog log)
     {
         _partake   = partake;
         _ffxivenue = ffxivenue;
         _synchell  = synchell;
+        _spotlight = spotlight;
         _config    = config;
         _log       = log;
     }
@@ -74,6 +77,7 @@ public class EventCacheService : IDisposable
             {
                 await Task.Delay(TimeSpan.FromSeconds(60), _cts.Token);
                 await _synchell.RefreshAsync();
+                await _spotlight.RefreshAsync();
                 await _lock.WaitAsync();
                 try { foreach (var ev in CachedEvents) ev.LinkedSynchell = _synchell.FindForEvent(ev.Server, ev.LifestreamCode); }
                 finally { _lock.Release(); }
@@ -98,6 +102,7 @@ public class EventCacheService : IDisposable
                 all.AddRange(await _ffxivenue.FetchEventsAsync());
 
             await _synchell.RefreshAsync();
+            await _spotlight.RefreshAsync();
             foreach (var ev in all)
                 ev.LinkedSynchell = _synchell.FindForEvent(ev.Server, ev.LifestreamCode);
 

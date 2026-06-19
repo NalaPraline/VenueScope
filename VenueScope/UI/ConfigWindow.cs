@@ -81,6 +81,17 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.SameLine(0, 8);
         ImGui.TextColored(ColSubtitle, "recurring venue openings");
 
+        ImGui.Spacing();
+
+        var showSpot = _config.ShowSpotlight;
+        if (ImGui.Checkbox("Spotlight banner", ref showSpot))
+        {
+            _config.ShowSpotlight = showSpot;
+            _config.Save();
+        }
+        ImGui.SameLine(0, 8);
+        ImGui.TextColored(ColSubtitle, "featured venue at the top of the list");
+
         ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }
 

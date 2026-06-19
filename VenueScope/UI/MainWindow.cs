@@ -16,10 +16,19 @@ namespace VenueScope.UI;
 
 public sealed class MainWindow : Window, IDisposable
 {
-    private readonly EventCacheService _cache;
-    private readonly PartakeService    _partake;
-    private readonly Configuration     _config;
-    private readonly Action            _openConfig;
+    private readonly EventCacheService       _cache;
+    private readonly PartakeService          _partake;
+    private readonly Configuration           _config;
+    private readonly Action                  _openConfig;
+    private readonly SpotlightService        _spotlights;
+    private readonly Action<SpotlightVenue>  _openSpotlight;
+
+    private int      _spotlightIndex    = 0;
+    private DateTime _spotlightRotateAt = DateTime.MinValue;
+    private const float SpotlightRotateSeconds = 10f;
+    private const string SpotlightContactUrl  = "https://discordid.netlify.app/?id=249633834646241281";
+    private const string SpotlightPromoImage  = "https://venuescope-synchells.yunookami.workers.dev/promo.jpg?v=6";
+    private const float  SpotlightHeroAspect  = 1440f / 220f;
     private readonly EventStringCache          _stringCache     = new();
     private readonly EventFilterCache          _filterCache     = new();
     private readonly Dictionary<string, float> _cardHeightCache = new();
@@ -52,13 +61,16 @@ public sealed class MainWindow : Window, IDisposable
 
     private const float SidebarW = 165f;
 
-    public MainWindow(EventCacheService cache, PartakeService partake, Configuration config, Action openConfig)
+    public MainWindow(EventCacheService cache, PartakeService partake, Configuration config, Action openConfig,
+                      SpotlightService spotlights, Action<SpotlightVenue> openSpotlight)
         : base("VenueScope##main", ImGuiWindowFlags.None)
     {
-        _cache      = cache;
-        _partake    = partake;
-        _config     = config;
-        _openConfig = openConfig;
+        _cache         = cache;
+        _partake       = partake;
+        _config        = config;
+        _openConfig    = openConfig;
+        _spotlights    = spotlights;
+        _openSpotlight = openSpotlight;
 
         EventRenderer.OnHideVenue = name =>
         {
@@ -523,9 +535,242 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Dummy(new Vector2(w, 6f * gs));
     }
 
+    private void DrawSpotlightHero()
+    {
+        if (!_config.ShowSpotlight) return;
+
+        var venues = _spotlights.Venues;
+
+        float gs = ImGuiHelpers.GlobalScale;
+
+        int total      = venues.Count + 1;
+        int promoIndex = venues.Count;
+
+        if (_spotlightIndex >= total) _spotlightIndex = 0;
+        if (total > 1)
+        {
+            if (_spotlightRotateAt == DateTime.MinValue)
+                _spotlightRotateAt = DateTime.Now.AddSeconds(SpotlightRotateSeconds);
+            else if (DateTime.Now >= _spotlightRotateAt)
+            {
+                _spotlightIndex    = (_spotlightIndex + 1) % total;
+                _spotlightRotateAt = DateTime.Now.AddSeconds(SpotlightRotateSeconds);
+            }
+        }
+
+        bool isPromo = _spotlightIndex == promoIndex;
+
+        ImGui.Spacing();
+        float w = ImGui.GetContentRegionAvail().X - 8f * gs;
+        float h = w / SpotlightHeroAspect;
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 4f * gs);
+
+        var   p0       = ImGui.GetCursorScreenPos();
+        var   p1       = p0 + new Vector2(w, h);
+        float rounding = 6f * gs;
+
+        if (isPromo)
+            DrawPromoBanner(p0, p1, w, h, rounding);
+        else
+            DrawVenueBanner(p0, p1, w, h, rounding, venues[_spotlightIndex]);
+
+        ImGui.InvisibleButton("##spothit", new Vector2(w, h));
+        bool heroClicked = ImGui.IsItemClicked();
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            ImGui.SetTooltip(isPromo ? "Open Discord" : "Open spotlight");
+        }
+        if (heroClicked)
+        {
+            if (isPromo) Util.OpenLink(SpotlightContactUrl);
+            else         _openSpotlight(venues[_spotlightIndex]);
+        }
+
+        DrawSpotlightControls(total);
+
+        ImGui.Spacing();
+        DrawSidebarRuleMain(w);
+        ImGui.Spacing();
+    }
+
+    private void DrawVenueBanner(Vector2 p0, Vector2 p1, float w, float h, float rounding, SpotlightVenue venue)
+    {
+        float gs     = ImGuiHelpers.GlobalScale;
+        var   dl     = ImGui.GetWindowDrawList();
+        var   accent = venue.GetAccent() ?? ColAccent;
+
+        var icon = !string.IsNullOrEmpty(venue.ImageUrl) ? EventRenderer.IconCache?.GetOrQueue(venue.ImageUrl) : null;
+        if (icon != null && icon.Width > 0 && icon.Height > 0)
+        {
+            float boxAspect = w / h;
+            float imgAspect = (float)icon.Width / icon.Height;
+            var uv0 = Vector2.Zero;
+            var uv1 = Vector2.One;
+            if (imgAspect > boxAspect)
+            {
+                float crop   = boxAspect / imgAspect;
+                float offset = (1f - crop) * 0.5f;
+                uv0 = new Vector2(offset, 0f);
+                uv1 = new Vector2(1f - offset, 1f);
+            }
+            else
+            {
+                float crop   = imgAspect / boxAspect;
+                float offset = (1f - crop) * 0.5f;
+                uv0 = new Vector2(0f, offset);
+                uv1 = new Vector2(1f, 1f - offset);
+            }
+            dl.AddImageRounded(icon.Handle, p0, p1, uv0, uv1, 0xFFFFFFFF, rounding);
+        }
+        else
+        {
+            dl.AddRectFilled(p0, p1, ImGui.ColorConvertFloat4ToU32(new Vector4(0.16f, 0.13f, 0.24f, 1f)), rounding);
+        }
+
+        float fadeTop = p0.Y + h * 0.42f;
+        uint  clear   = ImGui.ColorConvertFloat4ToU32(new Vector4(0f, 0f, 0f, 0f));
+        uint  dark    = ImGui.ColorConvertFloat4ToU32(new Vector4(0f, 0f, 0f, 0.78f));
+        dl.AddRectFilledMultiColor(new Vector2(p0.X, fadeTop), p1, clear, clear, dark, dark);
+        dl.AddRect(p0, p1, ImGui.ColorConvertFloat4ToU32(accent with { W = 0.30f }), rounding, 0, gs);
+
+        dl.AddText(p0 + new Vector2(12f * gs, 10f * gs),
+            ImGui.ColorConvertFloat4ToU32(accent with { W = 0.92f }), "SPOTLIGHT");
+
+        DrawBannerStatusBadge(p0, p1, accent, venue);
+
+        float lineH   = ImGui.GetTextLineHeight();
+        var   namePos = new Vector2(p0.X + 12f * gs, p1.Y - 12f * gs - lineH * 2f - 2f * gs);
+        dl.AddText(namePos,
+            ImGui.ColorConvertFloat4ToU32(new Vector4(0.98f, 0.98f, 1.00f, 1f)),
+            string.IsNullOrEmpty(venue.Name) ? "(unnamed venue)" : venue.Name);
+
+        string sub = !string.IsNullOrEmpty(venue.Tagline)
+            ? venue.Tagline
+            : (!string.IsNullOrEmpty(venue.Server)
+                ? $"{venue.Server}  {venue.BuildLocationLabel()}".Trim()
+                : venue.BuildLocationLabel());
+        if (!string.IsNullOrEmpty(sub))
+            dl.AddText(namePos + new Vector2(0f, lineH + 3f * gs),
+                ImGui.ColorConvertFloat4ToU32(new Vector4(0.80f, 0.80f, 0.88f, 0.92f)), sub);
+    }
+
+    private void DrawBannerStatusBadge(Vector2 p0, Vector2 p1, Vector4 accent, SpotlightVenue venue)
+    {
+        var now    = DateTimeOffset.UtcNow;
+        var status = venue.GetStatus(now);
+        if (status != SpotlightStatus.Live && status != SpotlightStatus.Upcoming) return;
+
+        float gs = ImGuiHelpers.GlobalScale;
+        var   dl = ImGui.GetWindowDrawList();
+
+        bool    live = status == SpotlightStatus.Live;
+        string  txt  = live ? "● EVENT IN PROGRESS" : $"STARTS {ShortUntil(venue.StartTime!.Value, now)}";
+        Vector4 col  = live ? new Vector4(0.32f, 0.92f, 0.50f, 1f) : accent;
+
+        var   ts = ImGui.CalcTextSize(txt);
+        float px = 7f * gs;
+        float py = 3f * gs;
+        var   b1 = new Vector2(p1.X - 10f * gs, p0.Y + 9f * gs + ts.Y + py * 2f);
+        var   b0 = new Vector2(b1.X - (ts.X + px * 2f), p0.Y + 9f * gs);
+        float rad = (ts.Y + py * 2f) * 0.5f;
+
+        dl.AddRectFilled(b0, b1, ImGui.ColorConvertFloat4ToU32(col with { W = live ? 0.26f : 0.20f }), rad);
+        dl.AddRect(b0, b1, ImGui.ColorConvertFloat4ToU32(col with { W = 0.70f }), rad, 0, 1f);
+        dl.AddText(b0 + new Vector2(px, py), ImGui.ColorConvertFloat4ToU32(col), txt);
+    }
+
+    private static string ShortUntil(DateTimeOffset target, DateTimeOffset now)
+    {
+        var s = target - now;
+        if (s < TimeSpan.Zero) s = TimeSpan.Zero;
+        if (s.TotalDays  >= 1) return $"IN {(int)s.TotalDays}D {s.Hours}H";
+        if (s.TotalHours >= 1) return $"IN {(int)s.TotalHours}H {s.Minutes}M";
+        return $"IN {Math.Max(1, s.Minutes)}M";
+    }
+
+    private void DrawPromoBanner(Vector2 p0, Vector2 p1, float w, float h, float rounding)
+    {
+        float gs      = ImGuiHelpers.GlobalScale;
+        var   dl      = ImGui.GetWindowDrawList();
+        bool  hovered = ImGui.IsMouseHoveringRect(p0, p1);
+
+        var icon = EventRenderer.IconCache?.GetOrQueue(SpotlightPromoImage);
+        if (icon != null && icon.Width > 0 && icon.Height > 0)
+        {
+            dl.AddImageRounded(icon.Handle, p0, p1, Vector2.Zero, Vector2.One, 0xFFFFFFFF, rounding);
+            dl.AddRect(p0, p1,
+                ImGui.ColorConvertFloat4ToU32(ColAccent with { W = hovered ? 0.80f : 0.32f }), rounding, 0, 1.5f * gs);
+            return;
+        }
+
+        dl.AddRectFilled(p0, p1,
+            ImGui.ColorConvertFloat4ToU32(new Vector4(0.17f, 0.12f, 0.28f, 1f)), rounding);
+        dl.AddRect(p0, p1,
+            ImGui.ColorConvertFloat4ToU32(ColAccent with { W = hovered ? 0.80f : 0.50f }), rounding, 0, 1.5f * gs);
+
+        const string line1 = "Want your event in the spotlight?";
+        const string line2 = "Click here to reach me on Discord";
+        var   sz1 = ImGui.CalcTextSize(line1);
+        var   sz2 = ImGui.CalcTextSize(line2);
+        float gap = 6f * gs;
+        float cx  = p0.X + w * 0.5f;
+        float top = p0.Y + (h - (sz1.Y + gap + sz2.Y)) * 0.5f;
+
+        dl.AddText(new Vector2(cx - sz1.X * 0.5f, top),
+            ImGui.ColorConvertFloat4ToU32(new Vector4(0.96f, 0.92f, 1.00f, 1f)), line1);
+        dl.AddText(new Vector2(cx - sz2.X * 0.5f, top + sz1.Y + gap),
+            ImGui.ColorConvertFloat4ToU32(ColAccent with { W = 0.90f }), line2);
+    }
+
+    private void DrawSpotlightControls(int count)
+    {
+        if (count <= 1) return;
+        float gs = ImGuiHelpers.GlobalScale;
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 4f * gs);
+
+        using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0f, 0f, 0f, 0f)))
+        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.30f, 0.30f, 0.42f, 0.50f)))
+        using (ImRaii.PushColor(ImGuiCol.Text,          ColSubtitle))
+        {
+            if (ImGui.SmallButton("‹##spotprev"))
+            {
+                _spotlightIndex    = (_spotlightIndex - 1 + count) % count;
+                _spotlightRotateAt = DateTime.Now.AddSeconds(SpotlightRotateSeconds);
+            }
+            ImGui.SameLine(0, 6);
+
+            for (int i = 0; i < count; i++)
+            {
+                if (i > 0) ImGui.SameLine(0, 3);
+                bool active = i == _spotlightIndex;
+                bool promo  = i == count - 1;
+                using (ImRaii.PushColor(ImGuiCol.Text, active ? ColAccent : ColSubtitle with { W = 0.45f }))
+                    ImGui.TextUnformatted(promo ? "★" : (active ? "●" : "○"));
+            }
+
+            ImGui.SameLine(0, 6);
+            if (ImGui.SmallButton("›##spotnext"))
+            {
+                _spotlightIndex    = (_spotlightIndex + 1) % count;
+                _spotlightRotateAt = DateTime.Now.AddSeconds(SpotlightRotateSeconds);
+            }
+        }
+    }
+
+    private void DrawSidebarRuleMain(float w)
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+        var   p0 = ImGui.GetCursorScreenPos() + new Vector2(4f * gs, 0f);
+        var   p1 = p0 + new Vector2(w, 1f);
+        ImGui.GetWindowDrawList().AddRectFilled(p0, p1, ImGui.ColorConvertFloat4ToU32(ColDivider));
+        ImGui.Dummy(new Vector2(0f, 1f));
+    }
+
     private void DrawMainContent()
     {
         DrawHideBanner();
+        DrawSpotlightHero();
 
         if (_favoritesOnly)
         {

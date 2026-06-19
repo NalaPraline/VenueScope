@@ -52,12 +52,14 @@ public sealed class Plugin : IDalamudPlugin
     public Configuration Configuration { get; init; }
 
     public readonly WindowSystem WindowSystem = new("VenueScope");
-    private MainWindow   MainWindow   { get; init; }
-    private ConfigWindow ConfigWindow { get; init; }
+    private MainWindow      MainWindow      { get; init; }
+    private ConfigWindow    ConfigWindow    { get; init; }
+    private SpotlightWindow SpotlightWindow { get; init; }
 
     private readonly PartakeService      _partakeService;
     private readonly FFXIVenueService    _ffxivenueService;
     private readonly SynchellService     _synchellService;
+    private readonly SpotlightService    _spotlightService;
     private readonly EventCacheService   _cacheService;
     private readonly NotificationService _notificationService;
     private readonly TeamIconCache       _teamIconCache;
@@ -70,11 +72,17 @@ public sealed class Plugin : IDalamudPlugin
             Configuration.SynchellApiUrl = "https://venuescope-synchells.yunookami.workers.dev/synchells";
             Configuration.Save();
         }
+        if (string.IsNullOrEmpty(Configuration.SpotlightApiUrl))
+        {
+            Configuration.SpotlightApiUrl = "https://venuescope-synchells.yunookami.workers.dev/spotlights";
+            Configuration.Save();
+        }
 
         _partakeService      = new PartakeService(Log, DataManager);
         _ffxivenueService    = new FFXIVenueService(Log);
         _synchellService     = new SynchellService(Log, Configuration.SynchellApiUrl);
-        _cacheService        = new EventCacheService(_partakeService, _ffxivenueService, _synchellService, Configuration, Log);
+        _spotlightService    = new SpotlightService(Log, Configuration.SpotlightApiUrl);
+        _cacheService        = new EventCacheService(_partakeService, _ffxivenueService, _synchellService, _spotlightService, Configuration, Log);
         _notificationService = new NotificationService(_cacheService, Configuration, NotificationManager, Log);
         _teamIconCache       = new TeamIconCache(TextureProvider, Log);
         LifestreamIpc        = new LifestreamIPC(PluginInterface);
@@ -97,7 +105,11 @@ public sealed class Plugin : IDalamudPlugin
         ConfigWindow = new ConfigWindow(Configuration, _partakeService, _cacheService);
         WindowSystem.AddWindow(ConfigWindow);
 
-        MainWindow = new MainWindow(_cacheService, _partakeService, Configuration, ConfigWindow.Toggle);
+        SpotlightWindow = new SpotlightWindow(Configuration);
+        WindowSystem.AddWindow(SpotlightWindow);
+
+        MainWindow = new MainWindow(_cacheService, _partakeService, Configuration, ConfigWindow.Toggle,
+                                    _spotlightService, SpotlightWindow.Open);
         WindowSystem.AddWindow(MainWindow);
 
         CommandManager.AddHandler(CmdMain, new CommandInfo(OnCommand)
@@ -132,6 +144,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.RemoveAllWindows();
         ConfigWindow.Dispose();
         MainWindow.Dispose();
+        SpotlightWindow.Dispose();
 
         CommandManager.RemoveHandler(CmdMain);
         CommandManager.RemoveHandler(CmdAlias);
@@ -141,6 +154,7 @@ public sealed class Plugin : IDalamudPlugin
         _partakeService.Dispose();
         _ffxivenueService.Dispose();
         _synchellService.Dispose();
+        _spotlightService.Dispose();
         _teamIconCache.Dispose();
         LifestreamIpc.Dispose();
 
