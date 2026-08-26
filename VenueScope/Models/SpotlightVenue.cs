@@ -24,6 +24,31 @@ public class SpotlightLineupEntry
 
     [JsonProperty("link")]
     public string Link { get; set; } = string.Empty;
+
+    [JsonProperty("logoUrl")]
+    public string LogoUrl { get; set; } = string.Empty;
+}
+
+public class SpotlightActivityDetail
+{
+    [JsonProperty("activity")]
+    public string Activity { get; set; } = string.Empty;
+
+    [JsonProperty("start")]
+    public string Start { get; set; } = string.Empty;
+
+    [JsonProperty("price")]
+    public string Price { get; set; } = string.Empty;
+
+    [JsonProperty("payout")]
+    public string Payout { get; set; } = string.Empty;
+
+    [JsonProperty("note")]
+    public string Note { get; set; } = string.Empty;
+
+    public bool HasDetails =>
+        !string.IsNullOrEmpty(Start) || !string.IsNullOrEmpty(Price) ||
+        !string.IsNullOrEmpty(Payout) || !string.IsNullOrEmpty(Note);
 }
 
 public class SpotlightVenue
@@ -39,6 +64,15 @@ public class SpotlightVenue
 
     [JsonProperty("tagline")]
     public string Tagline { get; set; } = string.Empty;
+
+    [JsonProperty("bannerTitle")]
+    public string BannerTitle { get; set; } = string.Empty;
+
+    [JsonProperty("bannerSubtitle")]
+    public string BannerSubtitle { get; set; } = string.Empty;
+
+    [JsonProperty("hideBannerText")]
+    public bool HideBannerText { get; set; }
 
     [JsonProperty("description")]
     public string Description { get; set; } = string.Empty;
@@ -57,6 +91,9 @@ public class SpotlightVenue
 
     [JsonProperty("activities")]
     public List<string> Activities { get; set; } = new();
+
+    [JsonProperty("activityDetails")]
+    public List<SpotlightActivityDetail> ActivityDetails { get; set; } = new();
 
     [JsonProperty("lineup")]
     public List<SpotlightLineupEntry> Lineup { get; set; } = new();

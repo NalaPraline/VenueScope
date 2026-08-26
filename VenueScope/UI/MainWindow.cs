@@ -639,17 +639,34 @@ public sealed class MainWindow : Window, IDisposable
 
         DrawBannerStatusBadge(p0, p1, accent, venue);
 
-        float lineH   = ImGui.GetTextLineHeight();
-        var   namePos = new Vector2(p0.X + 12f * gs, p1.Y - 12f * gs - lineH * 2f - 2f * gs);
-        dl.AddText(namePos,
-            ImGui.ColorConvertFloat4ToU32(new Vector4(0.98f, 0.98f, 1.00f, 1f)),
-            string.IsNullOrEmpty(venue.Name) ? "(unnamed venue)" : venue.Name);
+        if (venue.HideBannerText) return;
 
-        string sub = !string.IsNullOrEmpty(venue.Tagline)
-            ? venue.Tagline
-            : (!string.IsNullOrEmpty(venue.Server)
-                ? $"{venue.Server}  {venue.BuildLocationLabel()}".Trim()
-                : venue.BuildLocationLabel());
+        string title = !string.IsNullOrEmpty(venue.BannerTitle) ? venue.BannerTitle : venue.Name;
+
+        string sub = !string.IsNullOrEmpty(venue.BannerSubtitle)
+            ? venue.BannerSubtitle
+            : (!string.IsNullOrEmpty(venue.Tagline)
+                ? venue.Tagline
+                : (!string.IsNullOrEmpty(venue.Server)
+                    ? $"{venue.Server}  {venue.BuildLocationLabel()}".Trim()
+                    : venue.BuildLocationLabel()));
+
+        if (string.IsNullOrEmpty(title) && string.IsNullOrEmpty(sub)) return;
+
+        float lineH   = ImGui.GetTextLineHeight();
+        float bottom  = p1.Y - 12f * gs - lineH;
+        var   namePos = new Vector2(p0.X + 12f * gs, bottom - lineH - 2f * gs);
+
+        if (string.IsNullOrEmpty(title))
+        {
+            dl.AddText(new Vector2(p0.X + 12f * gs, bottom),
+                ImGui.ColorConvertFloat4ToU32(new Vector4(0.80f, 0.80f, 0.88f, 0.92f)), sub);
+            return;
+        }
+
+        dl.AddText(namePos,
+            ImGui.ColorConvertFloat4ToU32(new Vector4(0.98f, 0.98f, 1.00f, 1f)), title);
+
         if (!string.IsNullOrEmpty(sub))
             dl.AddText(namePos + new Vector2(0f, lineH + 3f * gs),
                 ImGui.ColorConvertFloat4ToU32(new Vector4(0.80f, 0.80f, 0.88f, 0.92f)), sub);

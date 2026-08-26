@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Added a Spotlight banner that highlights featured venues."
+          changelog: "Spotlight lineups now show DJ logos, activities can list their start time and price, and the banner text can be customized or hidden."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 

@@ -85,6 +85,12 @@ public sealed class SpotlightWindow : Window, IDisposable
             DrawActivityRow(v);
         }
 
+        if (v.ActivityDetails.Exists(d => d.HasDetails))
+        {
+            Gap(10f);
+            DrawGamesCard(v);
+        }
+
         Gap(12f);
         DrawLocationCard(v);
 
@@ -117,13 +123,18 @@ public sealed class SpotlightWindow : Window, IDisposable
     {
         float gs = ImGuiHelpers.GlobalScale;
         float w  = ImGui.GetContentRegionAvail().X;
-        float h  = 200f * gs;
         var   dl = ImGui.GetWindowDrawList();
         var   p0 = ImGui.GetCursorScreenPos();
-        var   p1 = p0 + new Vector2(w, h);
         float rounding = 10f * gs;
 
         var icon = !string.IsNullOrEmpty(v.ImageUrl) ? EventRenderer.IconCache?.GetOrQueue(v.ImageUrl) : null;
+
+        float h = 200f * gs;
+        if (icon != null && icon.Width > 0 && icon.Height > 0)
+            h = Math.Clamp(w / ((float)icon.Width / icon.Height), 120f * gs, 360f * gs);
+
+        var p1 = p0 + new Vector2(w, h);
+
         if (icon != null && icon.Width > 0 && icon.Height > 0)
         {
             float imgAspect = (float)icon.Width / icon.Height;
@@ -153,16 +164,29 @@ public sealed class SpotlightWindow : Window, IDisposable
             dl.AddRectFilledMultiColor(p0, p1, cTop, cTop, cBot, cBot);
         }
 
-        float scrimH = h * 0.66f;
-        uint  clear  = ImGui.ColorConvertFloat4ToU32(new Vector4(0.035f, 0.028f, 0.06f, 0.00f));
-        uint  shade  = ImGui.ColorConvertFloat4ToU32(new Vector4(0.035f, 0.028f, 0.06f, 0.94f));
-        dl.AddRectFilledMultiColor(new Vector2(p0.X, p1.Y - scrimH), p1, clear, clear, shade, shade);
+        float  pad    = 14f * gs;
+        string name   = !string.IsNullOrEmpty(v.BannerTitle) ? v.BannerTitle : v.Name;
+        string tag    = !string.IsNullOrEmpty(v.BannerSubtitle) ? v.BannerSubtitle : v.Tagline;
+        if (v.HideBannerText) { name = string.Empty; tag = string.Empty; }
+        bool   hasTag = !string.IsNullOrEmpty(tag);
+        bool   hasText = !string.IsNullOrEmpty(name) || hasTag;
+
+        if (hasText)
+        {
+            float scrimH = h * 0.55f;
+            uint  clear  = ImGui.ColorConvertFloat4ToU32(new Vector4(0.035f, 0.028f, 0.06f, 0.00f));
+            uint  shade  = ImGui.ColorConvertFloat4ToU32(new Vector4(0.035f, 0.028f, 0.06f, 0.88f));
+            dl.AddRectFilledMultiColor(new Vector2(p0.X, p1.Y - scrimH), p1, clear, clear, shade, shade);
+        }
 
         dl.AddRect(p0, p1, ImGui.ColorConvertFloat4ToU32(_accent with { W = 0.28f }), rounding, 0, 1.5f * gs);
 
-        float  pad    = 14f * gs;
-        string name   = string.IsNullOrEmpty(v.Name) ? "(unnamed venue)" : v.Name;
-        bool   hasTag = !string.IsNullOrEmpty(v.Tagline);
+        if (!hasText)
+        {
+            ImGui.SetCursorScreenPos(p0);
+            ImGui.Dummy(new Vector2(w, h));
+            return;
+        }
 
         ImGui.PushClipRect(p0, p1, true);
 
@@ -179,18 +203,21 @@ public sealed class SpotlightWindow : Window, IDisposable
         float topY   = p1.Y - pad - blockH;
         float leftX  = p0.X + pad;
 
-        ImGui.SetCursorScreenPos(new Vector2(leftX, topY));
-        ImGui.SetWindowFontScale(titleScale);
-        using (ImRaii.PushColor(ImGuiCol.Text, ColTitle))
-            ImGui.TextUnformatted(name);
-        ImGui.SetWindowFontScale(1f);
+        if (!string.IsNullOrEmpty(name))
+        {
+            ImGui.SetCursorScreenPos(new Vector2(leftX, topY));
+            ImGui.SetWindowFontScale(titleScale);
+            using (ImRaii.PushColor(ImGuiCol.Text, ColTitle))
+                ImGui.TextUnformatted(name);
+            ImGui.SetWindowFontScale(1f);
+        }
 
         if (hasTag)
         {
             ImGui.SetCursorScreenPos(new Vector2(leftX, topY + nameSz.Y + gap2));
             ImGui.SetWindowFontScale(tagScale);
             using (ImRaii.PushColor(ImGuiCol.Text, ColTagline))
-                ImGui.TextUnformatted(v.Tagline);
+                ImGui.TextUnformatted(tag);
             ImGui.SetWindowFontScale(1f);
         }
 
@@ -366,16 +393,29 @@ public sealed class SpotlightWindow : Window, IDisposable
         SectionHeader("Lineup");
         ImGui.Dummy(new Vector2(0f, 4f * ImGuiHelpers.GlobalScale));
 
+        float gs    = ImGuiHelpers.GlobalScale;
+        float rowH  = 36f * gs;
+        float lineH = ImGui.GetTextLineHeight();
+
         for (int i = 0; i < v.Lineup.Count; i++)
         {
             var entry = v.Lineup[i];
-            if (i > 0) ImGui.Dummy(new Vector2(0f, 2f * ImGuiHelpers.GlobalScale));
+            if (i > 0) ImGui.Dummy(new Vector2(0f, 4f * gs));
+
+            float startY = ImGui.GetCursorPosY();
 
             if (!string.IsNullOrEmpty(entry.Time))
             {
+                ImGui.SetCursorPosY(startY + (rowH - (lineH + 4f * gs)) * 0.5f);
                 DrawTimeChip(entry.Time);
-                ImGui.SameLine(0, 8);
+                ImGui.SameLine(0, 9);
             }
+
+            ImGui.SetCursorPosY(startY);
+            DrawLineupLogo(entry, rowH);
+            ImGui.SameLine(0, 9);
+
+            ImGui.SetCursorPosY(startY + (rowH - lineH) * 0.5f);
 
             if (!string.IsNullOrEmpty(entry.Link))
             {
@@ -394,6 +434,98 @@ public sealed class SpotlightWindow : Window, IDisposable
                 using (ImRaii.PushColor(ImGuiCol.Text, ColBody))
                     ImGui.TextUnformatted(entry.Name);
             }
+
+            ImGui.SetCursorPosY(startY + rowH);
+        }
+
+        EndCard(card);
+    }
+
+    private void DrawLineupLogo(SpotlightLineupEntry entry, float size)
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+        var   dl = ImGui.GetWindowDrawList();
+        var   p0 = ImGui.GetCursorScreenPos();
+
+        var logo = !string.IsNullOrEmpty(entry.LogoUrl)
+            ? EventRenderer.IconCache?.GetOrQueue(entry.LogoUrl)
+            : null;
+
+        if (logo != null && logo.Width > 0 && logo.Height > 0)
+        {
+            float imgAspect = (float)logo.Width / logo.Height;
+            var   uv0 = Vector2.Zero;
+            var   uv1 = Vector2.One;
+            if (imgAspect > 1f)
+            {
+                float off = (1f - 1f / imgAspect) * 0.5f;
+                uv0 = new Vector2(off, 0f);
+                uv1 = new Vector2(1f - off, 1f);
+            }
+            else if (imgAspect < 1f)
+            {
+                float off = (1f - imgAspect) * 0.5f;
+                uv0 = new Vector2(0f, off);
+                uv1 = new Vector2(1f, 1f - off);
+            }
+
+            var q1 = p0 + new Vector2(size, size);
+            dl.AddRectFilled(p0, q1, ImGui.ColorConvertFloat4ToU32(_accent with { W = 0.10f }), 7f * gs);
+            dl.AddImageRounded(logo.Handle, p0, q1, uv0, uv1, 0xFFFFFFFF, 7f * gs);
+            ImGui.Dummy(new Vector2(size, size));
+            return;
+        }
+
+        dl.AddCircleFilled(
+            p0 + new Vector2(size * 0.5f, size * 0.5f), 3.5f * gs,
+            ImGui.ColorConvertFloat4ToU32(_accent with { W = 0.55f }));
+        ImGui.Dummy(new Vector2(size, size));
+    }
+
+    private void DrawGamesCard(SpotlightVenue v)
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+        var card = BeginCard(_accent);
+        SectionHeader("Games");
+        ImGui.Dummy(new Vector2(0f, 4f * gs));
+
+        bool first = true;
+        foreach (var d in v.ActivityDetails)
+        {
+            if (!d.HasDetails) continue;
+
+            if (!first)
+            {
+                ImGui.Dummy(new Vector2(0f, 5f * gs));
+                ImGui.Separator();
+                ImGui.Dummy(new Vector2(0f, 5f * gs));
+            }
+            first = false;
+
+            using (ImRaii.PushColor(ImGuiCol.Text, SpotlightActivities.GetColor(d.Activity)))
+                ImGui.TextUnformatted(d.Activity);
+
+            if (!string.IsNullOrEmpty(d.Start))
+            {
+                ImGui.SameLine();
+                float chipW = ImGui.CalcTextSize(d.Start).X + 12f * gs + 13f * gs;
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X - chipW);
+                DrawTimeChip(d.Start);
+            }
+
+            ImGui.Dummy(new Vector2(0f, 2f * gs));
+
+            if (!string.IsNullOrEmpty(d.Price))
+                using (ImRaii.PushColor(ImGuiCol.Text, ColBody))
+                    ImGui.TextUnformatted(d.Price);
+
+            if (!string.IsNullOrEmpty(d.Note))
+                using (ImRaii.PushColor(ImGuiCol.Text, ColMuted))
+                    ImGui.TextWrapped(d.Note);
+
+            if (!string.IsNullOrEmpty(d.Payout))
+                using (ImRaii.PushColor(ImGuiCol.Text, ColMuted))
+                    ImGui.TextWrapped(d.Payout);
         }
 
         EndCard(card);
