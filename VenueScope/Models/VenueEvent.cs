@@ -7,7 +7,8 @@ public enum EventSource
 {
     Partake,
     FFXIVenue,
-    VenueScope
+    VenueScope,
+    PartyFinder
 }
 
 public class LineupSlot
@@ -71,12 +72,19 @@ public class VenueEvent
 
     public string VenueId { get; set; } = string.Empty;
     public string Summary { get; set; } = string.Empty;
+    public string PlaceName { get; set; } = string.Empty;
     public string RpStyle { get; set; } = string.Empty;
     public List<LineupSlot>    Lineup     { get; set; } = new();
     public List<NightActivity> Activities { get; set; } = new();
 
-    public string VenueKey  => Source == EventSource.VenueScope ? $"venuescope-{VenueId}" : Id;
-    public string VenueName => Source == EventSource.FFXIVenue ? Title : TeamName;
+    // one key per venue so follow and hide work on all its events
+    public string VenueKey  => Source switch
+    {
+        EventSource.VenueScope  => $"venuescope-{VenueId}",
+        EventSource.PartyFinder => $"pf-{TeamName}",
+        _                       => Id,
+    };
+    public string VenueName => Source is EventSource.FFXIVenue or EventSource.PartyFinder ? Title : TeamName;
     public bool IsNew { get; set; }
 
     [System.NonSerialized]

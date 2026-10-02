@@ -11,6 +11,7 @@ public static class SlateText
     {
         if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
         var text = raw.Trim();
+        // old teams wrote plain text, newer ones get the editor json
         if (!text.StartsWith('[')) return text;
 
         JArray nodes;

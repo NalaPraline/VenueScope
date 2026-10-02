@@ -214,6 +214,7 @@ public static class SynchellNotifOverlay
         var pos = ImGui.GetWindowPos();
         if (Config == null || ImGui.IsMouseDown(ImGuiMouseButton.Left) || Vector2.DistanceSquared(pos, _lastPos) < 1f) return;
         _lastPos = pos;
+        // kept as a fraction so it stays put after a resolution change
         Config.VenueCardX = (pos.X - vp.Pos.X) / vp.Size.X;
         Config.VenueCardY = (pos.Y - vp.Pos.Y) / vp.Size.Y;
         Config.Save();

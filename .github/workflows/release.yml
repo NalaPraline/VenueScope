@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Spotlight lineups now show DJ logos, activities can list their start time and price, and the banner text can be customized or hidden."
+          changelog: "New look, a full event page with pictures, venue ads from the Party Finder, a quick search key, themes and animated banners."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
@@ -61,4 +61,4 @@ jobs:
         with:
           files: latest.zip
           generate_release_notes: true
-          prerelease: false
+          prerelease: ${{ steps.reltype.outputs.type == 'testing' }}

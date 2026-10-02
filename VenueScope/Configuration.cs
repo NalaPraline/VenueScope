@@ -32,6 +32,19 @@ public class Configuration : IPluginConfiguration
     public bool ShowPartakeEvents   { get; set; } = true;
     public bool ShowFFXIVenueEvents { get; set; } = true;
     public bool ShowVenueScopeEvents { get; set; } = true;
+    public bool ShowPartyFinderEvents { get; set; } = true;
+
+    public string  ThemeName       { get; set; } = "Night";
+    public bool    UseCustomAccent { get; set; } = false;
+    public System.Numerics.Vector4 CustomAccent { get; set; } = new(0.65f, 0.55f, 0.98f, 1f);
+    public float   WindowOpacity   { get; set; } = 1f;
+
+    public string LastSeenChangelog { get; set; } = string.Empty;
+
+    public int  QuickSearchKey     { get; set; } = 0;
+    public bool QuickSearchCtrl    { get; set; } = false;
+    public bool QuickSearchShift   { get; set; } = false;
+    public bool QuickSearchAlt     { get; set; } = false;
     public bool ShowSpotlight       { get; set; } = true;
 
     public int RefreshIntervalMinutes { get; set; } = 5;

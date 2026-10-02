@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.Command;
 using Dalamud.IoC;
 using Dalamud.Plugin;
@@ -24,6 +25,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IClientState            ClientState          { get; private set; } = null!;
     [PluginService] internal static IFramework              Framework            { get; private set; } = null!;
     [PluginService] internal static IObjectTable            ObjectTable          { get; private set; } = null!;
+    [PluginService] internal static IKeyState               KeyState             { get; private set; } = null!;
 
     internal static LifestreamIPC  LifestreamIpc   { get; private set; } = null!;
     internal static PartakeService PartakeRef      { get; private set; } = null!;
@@ -32,6 +34,7 @@ public sealed class Plugin : IDalamudPlugin
     private static bool     _pendingTeleportOnLoad  = false;
     private static DateTime _lastTravelAttempt      = DateTime.MinValue;
     private static DateTime _pendingTeleportReadyAt = DateTime.MinValue;
+    private static DateTime _travelStartedAt        = DateTime.MinValue;
 
     private bool     _pendingHousingCheck = false;
     private DateTime _housingCheckAt      = DateTime.MinValue;
@@ -39,6 +42,7 @@ public sealed class Plugin : IDalamudPlugin
 
     internal static void BeginPendingTravel()
     {
+        _travelStartedAt        = DateTime.UtcNow;
         _awaitingTitleScreen    = true;
         _pendingTeleportOnLoad  = false;
         _pendingTeleportReadyAt = DateTime.MinValue;
@@ -56,10 +60,14 @@ public sealed class Plugin : IDalamudPlugin
     private ConfigWindow    ConfigWindow    { get; init; }
     private SpotlightWindow SpotlightWindow { get; init; }
     private EventWindow     EventWindow     { get; init; }
+    private QuickSearchWindow QuickSearch   { get; init; }
+    private ChangelogWindow Changelog       { get; init; }
+    private bool            _quickKeyHeld;
 
     private readonly PartakeService      _partakeService;
     private readonly FFXIVenueService    _ffxivenueService;
     private readonly VenueScopeService   _venueScopeService;
+    private readonly PartyFinderService  _partyFinderService;
     private readonly SynchellService     _synchellService;
     private readonly SpotlightService    _spotlightService;
     private readonly EventCacheService   _cacheService;
@@ -69,6 +77,7 @@ public sealed class Plugin : IDalamudPlugin
     public Plugin()
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        Palette.Apply(Configuration);
         if (string.IsNullOrEmpty(Configuration.SynchellApiUrl))
         {
             Configuration.SynchellApiUrl = "https://venuescope-synchells.yunookami.workers.dev/synchells";
@@ -83,21 +92,17 @@ public sealed class Plugin : IDalamudPlugin
         _partakeService      = new PartakeService(Log, DataManager);
         _ffxivenueService    = new FFXIVenueService(Log);
         _venueScopeService   = new VenueScopeService(Log);
+        _partyFinderService  = new PartyFinderService(Log);
         _synchellService     = new SynchellService(Log, Configuration.SynchellApiUrl);
         _spotlightService    = new SpotlightService(Log, Configuration.SpotlightApiUrl);
-        _cacheService        = new EventCacheService(_partakeService, _ffxivenueService, _venueScopeService, _synchellService, _spotlightService, Configuration, Log);
+        _cacheService        = new EventCacheService(_partakeService, _ffxivenueService, _venueScopeService, _partyFinderService, _synchellService, _spotlightService, Configuration, Log);
         _notificationService = new NotificationService(_cacheService, Configuration, NotificationManager, Log);
         _teamIconCache       = new TeamIconCache(TextureProvider, Log);
         LifestreamIpc        = new LifestreamIPC(PluginInterface);
         PartakeRef           = _partakeService;
 
-        if (!string.IsNullOrEmpty(Configuration.PendingTravelCharName))
-        {
-            Configuration.PendingTravelCharName    = string.Empty;
-            Configuration.PendingTravelHomeWorld   = string.Empty;
-            Configuration.PendingTravelDestination = string.Empty;
-            Configuration.Save();
-        }
+        if (!string.IsNullOrEmpty(Configuration.PendingTravelCharName) || !string.IsNullOrEmpty(Configuration.PendingVenueCode))
+            ClearPendingTravel(Configuration);
         EventRenderer.IconCache    = _teamIconCache;
         EventRenderer.FlagService  = _ffxivenueService;
 
@@ -114,6 +119,19 @@ public sealed class Plugin : IDalamudPlugin
         EventWindow = new EventWindow(Configuration, _cacheService);
         WindowSystem.AddWindow(EventWindow);
         EventRenderer.OnOpenEvent = EventWindow.Open;
+
+        QuickSearch = new QuickSearchWindow(Configuration, _cacheService);
+        WindowSystem.AddWindow(QuickSearch);
+
+        Changelog = new ChangelogWindow();
+        WindowSystem.AddWindow(Changelog);
+        MainWindow.OnOpenChangelog = Changelog.Show;
+        if (Configuration.LastSeenChangelog != ChangelogWindow.Latest)
+        {
+            Changelog.Show();
+            Configuration.LastSeenChangelog = ChangelogWindow.Latest;
+            Configuration.Save();
+        }
 
         MainWindow = new MainWindow(_cacheService, _partakeService, Configuration, ConfigWindow.Toggle,
                                     _spotlightService, SpotlightWindow.Open);
@@ -154,6 +172,9 @@ public sealed class Plugin : IDalamudPlugin
         MainWindow.Dispose();
         SpotlightWindow.Dispose();
         EventWindow.Dispose();
+        QuickSearch.Dispose();
+        Changelog.Dispose();
+        MainWindow.OnOpenChangelog = null;
         EventRenderer.OnOpenEvent = null;
 
         CommandManager.RemoveHandler(CmdMain);
@@ -164,6 +185,7 @@ public sealed class Plugin : IDalamudPlugin
         _partakeService.Dispose();
         _ffxivenueService.Dispose();
         _venueScopeService.Dispose();
+        _partyFinderService.Dispose();
         _synchellService.Dispose();
         _spotlightService.Dispose();
         _teamIconCache.Dispose();
@@ -190,15 +212,15 @@ public sealed class Plugin : IDalamudPlugin
 
     internal static bool AreSameDC(string world1, string world2)
     {
-        var s1 = PartakeRef.Servers.Values.FirstOrDefault(s => s.Name == world1);
-        var s2 = PartakeRef.Servers.Values.FirstOrDefault(s => s.Name == world2);
+        var s1 = PartakeRef.Servers.Values.FirstOrDefault(s => s.Name.Equals(world1, StringComparison.OrdinalIgnoreCase));
+        var s2 = PartakeRef.Servers.Values.FirstOrDefault(s => s.Name.Equals(world2, StringComparison.OrdinalIgnoreCase));
         if (s1 == null || s2 == null) return false;
         return s1.DataCenterId == s2.DataCenterId;
     }
 
     internal static string? GetServerRegion(string serverName)
     {
-        var server = PartakeRef.Servers.Values.FirstOrDefault(s => s.Name == serverName);
+        var server = PartakeRef.Servers.Values.FirstOrDefault(s => s.Name.Equals(serverName, StringComparison.OrdinalIgnoreCase));
         if (server == null) return null;
         if (!PartakeRef.DataCenters.TryGetValue(server.DataCenterId, out var dc)) return null;
         return PartakeService.RegionList.ElementAtOrDefault(dc.Region);
@@ -230,10 +252,31 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
+        CheckQuickSearchKey();
+
         if (_pendingHousingCheck && DateTime.UtcNow >= _housingCheckAt)
         {
             _pendingHousingCheck = false;
             CheckHousingForSynchell();
+        }
+
+        // a trip that never finishes is dropped after a few minutes
+        // login queues can be long, so the trip itself gets more time than the relog
+        var limit = _awaitingTitleScreen ? TimeSpan.FromMinutes(4) : TimeSpan.FromMinutes(20);
+        if ((_awaitingTitleScreen || !string.IsNullOrEmpty(Configuration.PendingVenueCode))
+            && _travelStartedAt != DateTime.MinValue && DateTime.UtcNow - _travelStartedAt > limit)
+        {
+            var who = Configuration.PendingTravelCharName;
+            bool stuckAtLogin = _awaitingTitleScreen;
+            ClearPendingTravel(Configuration);
+            if (stuckAtLogin)
+                NotificationManager.AddNotification(new Notification
+                {
+                    Title   = "Could not switch character",
+                    Content = $"Logging in as {who} did not work. Check the name and world in Settings, Travel.",
+                    Type    = NotificationType.Error,
+                });
+            return;
         }
 
         if (_awaitingTitleScreen)
@@ -271,6 +314,7 @@ public sealed class Plugin : IDalamudPlugin
             {
                 Log.Information($"ConnectAndLogin accepted: {Configuration.PendingTravelCharName}@{Configuration.PendingTravelHomeWorld}");
                 _awaitingTitleScreen = false;
+                _travelStartedAt     = DateTime.UtcNow;
                 Configuration.PendingTravelCharName    = string.Empty;
                 Configuration.PendingTravelHomeWorld   = string.Empty;
                 Configuration.PendingTravelDestination = string.Empty;
@@ -286,10 +330,15 @@ public sealed class Plugin : IDalamudPlugin
         if (_pendingTeleportOnLoad && !string.IsNullOrEmpty(Configuration.PendingVenueCode))
         {
             var player = ObjectTable.LocalPlayer;
-            if (player == null) return;
+            // wait until Lifestream is done with its own world or data center trip
+            if (player == null || LifestreamIpc.IsBusy())
+            {
+                _pendingTeleportReadyAt = DateTime.MinValue;
+                return;
+            }
 
             if (_pendingTeleportReadyAt == DateTime.MinValue)
-                _pendingTeleportReadyAt = DateTime.UtcNow.AddSeconds(1.5);
+                _pendingTeleportReadyAt = DateTime.UtcNow.AddSeconds(2.5);
 
             if (DateTime.UtcNow < _pendingTeleportReadyAt) return;
 
@@ -337,34 +386,40 @@ public sealed class Plugin : IDalamudPlugin
         _pendingHousingCheck = true;
         _housingCheckAt      = DateTime.UtcNow.AddSeconds(1.5);
 
-        if (string.IsNullOrEmpty(Configuration.PendingVenueCode)) return;
+        if (string.IsNullOrEmpty(Configuration.PendingVenueCode) || _awaitingTitleScreen) return;
 
-        if (!string.IsNullOrEmpty(Configuration.PendingExpectedCharacter))
+        _pendingTeleportOnLoad  = true;
+        _pendingTeleportReadyAt = DateTime.MinValue;
+    }
+
+    internal static void ClearPendingTravel(Configuration config)
+    {
+        _awaitingTitleScreen           = false;
+        _pendingTeleportOnLoad         = false;
+        _travelStartedAt               = DateTime.MinValue;
+        config.PendingVenueCode         = string.Empty;
+        config.PendingVenueServer       = string.Empty;
+        config.PendingExpectedCharacter = string.Empty;
+        config.PendingTravelCharName    = string.Empty;
+        config.PendingTravelHomeWorld   = string.Empty;
+        config.PendingTravelDestination = string.Empty;
+        config.Save();
+    }
+
+    private void CheckQuickSearchKey()
+    {
+        if (Configuration.QuickSearchKey == 0 || ConfigWindow.CapturingKey) return;
+        var key  = (VirtualKey)Configuration.QuickSearchKey;
+        bool down = KeyState[key]
+            && KeyState[VirtualKey.CONTROL] == Configuration.QuickSearchCtrl
+            && KeyState[VirtualKey.SHIFT]   == Configuration.QuickSearchShift
+            && KeyState[VirtualKey.MENU]    == Configuration.QuickSearchAlt;
+        if (down && !_quickKeyHeld)
         {
-            var player = ObjectTable.LocalPlayer;
-            if (player == null) { _pendingTeleportOnLoad = true; return; }
-
-            var homeWorldId = (int)player.HomeWorld.RowId;
-            var world   = PartakeRef.Servers.TryGetValue(homeWorldId, out var srv) ? srv.Name : string.Empty;
-            var current = $"{player.Name.TextValue}@{world}";
-            if (!Configuration.PendingExpectedCharacter.Equals(current, System.StringComparison.OrdinalIgnoreCase))
-            {
-                Configuration.PendingVenueCode         = string.Empty;
-                Configuration.PendingVenueServer       = string.Empty;
-                Configuration.PendingExpectedCharacter = string.Empty;
-                Configuration.Save();
-                return;
-            }
+            // eat the key so the game does not act on it too
+            KeyState[key] = false;
+            QuickSearch.Summon();
         }
-
-        string args = Configuration.PendingVenueCode;
-
-        Configuration.PendingVenueCode         = string.Empty;
-        Configuration.PendingVenueServer       = string.Empty;
-        Configuration.PendingExpectedCharacter = string.Empty;
-        Configuration.Save();
-
-        LifestreamIpc.ExecuteCommand(args);
-        Log.Information($"Pending teleport executed: {args}");
+        _quickKeyHeld = down;
     }
 }

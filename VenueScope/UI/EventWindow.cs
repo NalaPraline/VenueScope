@@ -69,6 +69,7 @@ public sealed class EventWindow : Window, IDisposable
 
     public override void Draw()
     {
+        // list got refreshed, swap in the new copy so the window is not stale
         if (_event != null && _cache.LastRefresh != _seenRefresh)
         {
             _seenRefresh = _cache.LastRefresh;
@@ -102,6 +103,22 @@ public sealed class EventWindow : Window, IDisposable
                     any = true;
                 }
                 if (!any) Muted("This venue has no description yet.");
+            });
+            return;
+        }
+
+        if (ev.Source == EventSource.PartyFinder)
+        {
+            Card(null, w =>
+            {
+                Title("The ad", $"posted by {ev.Host}");
+                RichText.Draw(ev.Description, w);
+                Space(8);
+                ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + w);
+                ImGui.PushStyleColor(ImGuiCol.Text, Palette.Muted);
+                ImGui.TextWrapped("Seen in the in-game Party Finder, through xivpf.com. The title, address and venue are read from the ad by VenueScope, so they can be wrong. Check the ad text before you travel.");
+                ImGui.PopStyleColor();
+                ImGui.PopTextWrapPos();
             });
             return;
         }
@@ -215,7 +232,7 @@ public sealed class EventWindow : Window, IDisposable
         ImGui.SetWindowFontScale(1f);
         ImGui.PopTextWrapPos();
 
-        var meta = new[] { ev.TeamName.Length > 0 ? $"by {ev.TeamName}" : "", ev.AttendeeCount > 0 ? $"{ev.AttendeeCount} going" : "" }
+        var meta = new[] { ev.PlaceName.Length > 0 ? $"at {ev.PlaceName}" : "", ev.TeamName.Length > 0 ? $"by {ev.TeamName}" : "", ev.AttendeeCount > 0 ? $"{ev.AttendeeCount} going" : "" }
             .Where(s => s.Length > 0).ToArray();
         if (meta.Length > 0) Muted(string.Join("  ·  ", meta));
         if (ev.Summary.Length > 0) Soft(ev.Summary);
@@ -405,6 +422,7 @@ public sealed class EventWindow : Window, IDisposable
         }
     }
 
+    // DJ Luna gets an L, not a D
     private static string DjInitial(string name)
     {
         var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);

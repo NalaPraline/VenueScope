@@ -14,6 +14,7 @@ public class EventCacheService : IDisposable
     private readonly PartakeService _partake;
     private readonly FFXIVenueService _ffxivenue;
     private readonly VenueScopeService _venueScope;
+    private readonly PartyFinderService _partyFinder;
     private readonly SynchellService _synchell;
     private readonly SpotlightService _spotlight;
     private readonly Configuration _config;
@@ -34,13 +35,14 @@ public class EventCacheService : IDisposable
 
     public event Action<List<VenueEvent>>? OnNewEventsDetected;
 
-    public EventCacheService(PartakeService partake, FFXIVenueService ffxivenue, VenueScopeService venueScope,
+    public EventCacheService(PartakeService partake, FFXIVenueService ffxivenue, VenueScopeService venueScope, PartyFinderService partyFinder,
                              SynchellService synchell, SpotlightService spotlight,
                              Configuration config, IPluginLog log)
     {
         _partake   = partake;
         _ffxivenue = ffxivenue;
         _venueScope = venueScope;
+        _partyFinder = partyFinder;
         _synchell  = synchell;
         _spotlight = spotlight;
         _config    = config;
@@ -104,6 +106,10 @@ public class EventCacheService : IDisposable
                 all.AddRange(await _ffxivenue.FetchEventsAsync());
             if (_config.ShowVenueScopeEvents)
                 all.AddRange(await _venueScope.FetchEventsAsync());
+            if (_config.ShowPartyFinderEvents)
+                all.AddRange(await _partyFinder.FetchEventsAsync());
+
+            PartyFinderService.LinkToVenues(all);
 
             await _synchell.RefreshAsync();
             await _spotlight.RefreshAsync();
@@ -111,10 +117,11 @@ public class EventCacheService : IDisposable
                 ev.LinkedSynchell = _synchell.FindForEvent(ev.Server, ev.LifestreamCode);
 
             var knownIds = GetKnownIds();
-            var newEvents = all.Where(e => !knownIds.Contains(e.Id)).ToList();
+            // party finder ads come and go every hour, no toast for those
+            var newEvents = all.Where(e => e.Source != EventSource.PartyFinder && !knownIds.Contains(e.Id)).ToList();
             foreach (var e in newEvents) e.IsNew = true;
 
-            _config.LastKnownEventIds = JsonConvert.SerializeObject(all.Select(e => e.Id).ToList());
+            _config.LastKnownEventIds = JsonConvert.SerializeObject(all.Where(e => e.Source != EventSource.PartyFinder).Select(e => e.Id).ToList());
             _config.Save();
 
             MergeTagSpellings(all);

@@ -19,6 +19,7 @@ namespace VenueScope.Services;
 public sealed class TeamIconCache : IDisposable
 {
     private const int MaxSide        = 2048;
+    // some gifs are huge, 150 frames is already a lot
     private const int MaxFrames      = 150;
     private const int AnimatedPixels = 24_000_000;
 
@@ -55,6 +56,7 @@ public sealed class TeamIconCache : IDisposable
     {
         if (string.IsNullOrEmpty(url) || _disposed != 0) return null;
 
+        // partake throws a 500 on some old pictures, give them another go later
         if (_entries.TryGetValue(url, out var old) && old.State == EntryState.Failed
             && DateTime.UtcNow - old.FailedAt > TimeSpan.FromMinutes(3))
             _entries.TryRemove(url, out _);
@@ -161,6 +163,7 @@ public sealed class TeamIconCache : IDisposable
             ms = (int)(png.FrameDelay.Numerator * 1000.0 / png.FrameDelay.Denominator);
         else if (meta.TryGetWebpFrameMetadata(out var webp))
             ms = (int)webp.FrameDelay;
+        // browsers do this too, otherwise some gifs spin like crazy
         return ms <= 10 ? 100 : ms;
     }
 

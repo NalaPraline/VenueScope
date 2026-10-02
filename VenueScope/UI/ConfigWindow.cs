@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game.ClientState.Keys;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
@@ -20,7 +21,7 @@ public sealed class ConfigWindow : Window, IDisposable
     private readonly PartakeService    _partake;
     private readonly EventCacheService _cache;
 
-    private enum Page { General, DataCenters, Notifications, Display, Travel, Hidden, About }
+    private enum Page { General, DataCenters, Notifications, Display, Theme, Travel, Hidden, About }
     private Page _page = Page.General;
 
     private static readonly string[] RegionNames      = ["Japan", "North America", "Europe", "Oceania"];
@@ -82,8 +83,11 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.PopStyleColor(15);
     }
 
+    public override void OnClose() => CapturingKey = false;
+
     public override void Draw()
     {
+        if (_page != Page.Travel) CapturingKey = false;
         float gs = ImGuiHelpers.GlobalScale;
         using var padding = ImRaii.PushStyle(ImGuiStyleVar.FramePadding, new Vector2(10f, 6f) * gs);
 
@@ -101,6 +105,7 @@ public sealed class ConfigWindow : Window, IDisposable
                     Nav(Page.DataCenters,   FontAwesomeIcon.Globe,      "Data centers");
                     Nav(Page.Notifications, FontAwesomeIcon.Bell,       "Notifications");
                     Nav(Page.Display,       FontAwesomeIcon.Eye,        "Display");
+                    Nav(Page.Theme,         FontAwesomeIcon.Palette,    "Theme");
                     Nav(Page.Travel,        FontAwesomeIcon.PlaneDeparture, "Travel");
                     Nav(Page.Hidden,        FontAwesomeIcon.EyeSlash,   "Hidden venues", _config.HiddenVenueCache.Count);
                     Nav(Page.About,         FontAwesomeIcon.InfoCircle, "About");
@@ -126,6 +131,7 @@ public sealed class ConfigWindow : Window, IDisposable
             case Page.DataCenters:   DrawDataCenters();   break;
             case Page.Notifications: DrawNotifications(); break;
             case Page.Display:       DrawDisplay();       break;
+            case Page.Theme:         DrawTheme();         break;
             case Page.Travel:        DrawTravel();        break;
             case Page.Hidden:        DrawHidden();        break;
             case Page.About:         DrawAbout();         break;
@@ -168,6 +174,13 @@ public sealed class ConfigWindow : Window, IDisposable
             _config.Save();
             Task.Run(_cache.RefreshNowAsync);
         }
+        var showPf = _config.ShowPartyFinderEvents;
+        if (Widgets.Toggle("##srcpf", "Party Finder", ref showPf, "Venue ads from the in-game Party Finder, through xivpf.com"))
+        {
+            _config.ShowPartyFinderEvents = showPf;
+            _config.Save();
+            Task.Run(_cache.RefreshNowAsync);
+        }
         var showSpot = _config.ShowSpotlight;
         if (Widgets.Toggle("##spot", "Spotlight banner", ref showSpot, "Featured venues at the top of the list"))
         {
@@ -187,11 +200,12 @@ public sealed class ConfigWindow : Window, IDisposable
         var pCount = _cache.CachedEvents.Count(e => e.Source == EventSource.Partake);
         var fCount = _cache.CachedEvents.Count(e => e.Source == EventSource.FFXIVenue);
         var vCount = _cache.CachedEvents.Count(e => e.Source == EventSource.VenueScope);
+        var pfCount = _cache.CachedEvents.Count(e => e.Source == EventSource.PartyFinder);
         using (ImRaii.PushColor(ImGuiCol.Text, Palette.Muted))
         {
             ImGui.TextUnformatted(_cache.IsRefreshing
                 ? "Loading..."
-                : $"{pCount} Partake events, {fCount} venue openings and {vCount} VenueScope events loaded.");
+                : $"{pCount} Partake events, {fCount} venue openings, {vCount} VenueScope events and {pfCount} Party Finder ads loaded.");
         }
 
         ImGui.Dummy(new Vector2(0f, 2f * ImGuiHelpers.GlobalScale));
@@ -332,10 +346,124 @@ public sealed class ConfigWindow : Window, IDisposable
 
         Widgets.Group("Source shown first");
         int source = _config.DefaultSourceFilter + 1;
-        if (Widgets.Segment("##defsrc", ["All", "Partake", "FFXIV Venues", "VenueScope"], ref source, FieldWidth))
+        if (Widgets.Segment("##defsrc", ["All", "Partake", "FFXIV Venues", "VenueScope", "Party Finder"], ref source, FieldWidth))
         {
             _config.DefaultSourceFilter = source - 1;
             _config.Save();
+        }
+    }
+
+    public static bool CapturingKey { get; private set; }
+    private bool _captureArmed;
+
+    private static readonly VirtualKey[] NotAKey =
+    [
+        VirtualKey.NO_KEY, VirtualKey.LBUTTON, VirtualKey.RBUTTON, VirtualKey.MBUTTON, VirtualKey.XBUTTON1, VirtualKey.XBUTTON2,
+        VirtualKey.CONTROL, VirtualKey.SHIFT, VirtualKey.MENU, VirtualKey.LCONTROL, VirtualKey.RCONTROL,
+        VirtualKey.LSHIFT, VirtualKey.RSHIFT, VirtualKey.LMENU, VirtualKey.RMENU, VirtualKey.LWIN, VirtualKey.RWIN,
+    ];
+
+    // waits for everything to be let go first, otherwise the click itself counts
+    private void ListenForKey()
+    {
+        var keys = Plugin.KeyState.GetValidVirtualKeys().Where(k => !NotAKey.Contains(k)).ToArray();
+        var down = keys.FirstOrDefault(k => Plugin.KeyState[k]);
+        if (!_captureArmed)
+        {
+            if (down == VirtualKey.NO_KEY) _captureArmed = true;
+            return;
+        }
+        if (down == VirtualKey.NO_KEY) return;
+
+        Plugin.KeyState[down] = false;
+        CapturingKey = false;
+        if (down == VirtualKey.ESCAPE) return;
+
+        _config.QuickSearchKey   = (int)down;
+        _config.QuickSearchCtrl  = Plugin.KeyState[VirtualKey.CONTROL];
+        _config.QuickSearchShift = Plugin.KeyState[VirtualKey.SHIFT];
+        _config.QuickSearchAlt   = Plugin.KeyState[VirtualKey.MENU];
+        _config.Save();
+    }
+
+    private string QuickKeyLabel()
+    {
+        var parts = new List<string>();
+        if (_config.QuickSearchCtrl)  parts.Add("Ctrl");
+        if (_config.QuickSearchShift) parts.Add("Shift");
+        if (_config.QuickSearchAlt)   parts.Add("Alt");
+        parts.Add(((VirtualKey)_config.QuickSearchKey).GetFancyName());
+        return string.Join(" + ", parts);
+    }
+
+    private void DrawTheme()
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+        Widgets.PageTitle("Theme", "Colors of every VenueScope window.");
+
+        float avail = ImGui.GetContentRegionAvail().X - 12f * gs;
+        int   cols  = avail > 520f * gs ? 3 : 2;
+        float gap   = 8f * gs;
+        float cardW = (avail - gap * (cols - 1)) / cols;
+        float cardH = 58f * gs;
+        var   dl    = ImGui.GetWindowDrawList();
+
+        for (int i = 0; i < Palette.Themes.Count; i++)
+        {
+            var theme = Palette.Themes[i];
+            if (i % cols != 0) ImGui.SameLine(0, gap);
+            var  p0      = ImGui.GetCursorScreenPos();
+            bool clicked = ImGui.InvisibleButton($"##theme{theme.Name}", new Vector2(cardW, cardH));
+            bool hovered = ImGui.IsItemHovered();
+            bool on      = _config.ThemeName == theme.Name;
+
+            dl.AddRectFilled(p0, p0 + new Vector2(cardW, cardH), Palette.U(theme.Card), 9f * gs);
+            if (on || hovered)
+                dl.AddRect(p0, p0 + new Vector2(cardW, cardH), Palette.U(on ? theme.Accent : Palette.Line), 9f * gs, 0, on ? 2f * gs : 1f);
+            float r = 7f * gs;
+            var   c = p0 + new Vector2(14f * gs, 16f * gs);
+            dl.AddCircleFilled(c, r, Palette.U(theme.Window));
+            dl.AddCircle(c, r, Palette.U(Palette.Line));
+            dl.AddCircleFilled(c + new Vector2(r * 2.4f, 0), r, Palette.U(theme.Accent));
+            dl.AddCircleFilled(c + new Vector2(r * 4.8f, 0), r, Palette.U(theme.Text));
+            dl.AddText(p0 + new Vector2(10f * gs, cardH - ImGui.GetTextLineHeight() - 9f * gs), Palette.U(theme.Text), theme.Name);
+            if (hovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            if (clicked)
+            {
+                _config.ThemeName = theme.Name;
+                _config.Save();
+                Palette.Apply(_config);
+            }
+        }
+
+        Widgets.Group("Accent color", "Buttons, highlights and the selected items.");
+        var own = _config.UseCustomAccent;
+        if (Widgets.Toggle("##ownaccent", "Pick my own", ref own, own ? string.Empty : "Uses the color of the theme"))
+        {
+            _config.UseCustomAccent = own;
+            _config.Save();
+            Palette.Apply(_config);
+        }
+        if (_config.UseCustomAccent)
+        {
+            var rgb = new Vector3(_config.CustomAccent.X, _config.CustomAccent.Y, _config.CustomAccent.Z);
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 42f * gs);
+            if (ImGui.ColorEdit3("##accentcolor", ref rgb, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.PickerHueWheel))
+            {
+                _config.CustomAccent = new Vector4(rgb, 1f);
+                _config.Save();
+                Palette.Apply(_config);
+            }
+        }
+
+        Widgets.Group("Background", "Lower it to see the game through the windows.");
+        ImGui.SetNextItemWidth(FieldWidth);
+        int opacity = (int)Math.Round(_config.WindowOpacity * 100f);
+        if (ImGui.SliderInt("##opacity", ref opacity, 50, 100, "%d%%"))
+        {
+            _config.WindowOpacity = opacity / 100f;
+            _config.Save();
+            Palette.Apply(_config);
         }
     }
 
@@ -359,6 +487,42 @@ public sealed class ConfigWindow : Window, IDisposable
         {
             using (ImRaii.PushColor(ImGuiCol.Text, Palette.Muted))
                 ImGui.TextWrapped("Install it from the Dalamud plugin installer to use the Go button.");
+        }
+
+        Widgets.Group("Quick search", "A key that opens a search bar anywhere in the game. Type a venue name, press Enter, and you are on your way.");
+        if (CapturingKey)
+        {
+            ListenForKey();
+            if (Widgets.PillButton("##qscancel", FontAwesomeIcon.Keyboard, "Press your keys...", Palette.Accent, "Esc to cancel"))
+                CapturingKey = false;
+            using (ImRaii.PushColor(ImGuiCol.Text, Palette.Muted))
+                ImGui.TextWrapped("Hold Ctrl, Shift or Alt if you want, then press the key. Esc cancels.");
+        }
+        else
+        {
+            string label = _config.QuickSearchKey == 0 ? "Set key" : QuickKeyLabel();
+            if (Widgets.PillButton("##qsset", FontAwesomeIcon.Keyboard, label, _config.QuickSearchKey == 0 ? Palette.Accent : Palette.TextSoft,
+                    "Click, then press the keys you want"))
+            {
+                CapturingKey = true;
+                _captureArmed = false;
+            }
+            if (_config.QuickSearchKey != 0)
+            {
+                ImGui.SameLine(0, 6f * gs);
+                if (Widgets.PillButton("##qsclear", FontAwesomeIcon.Times, "Clear", Palette.Muted, "Turn the quick search off"))
+                {
+                    _config.QuickSearchKey = 0;
+                    _config.Save();
+                }
+            }
+            using (ImRaii.PushColor(ImGuiCol.Text, _config.QuickSearchKey == 0 ? Palette.Muted : Palette.TextSoft))
+                ImGui.TextWrapped(_config.QuickSearchKey == 0 ? "No key yet. Set one to turn the quick search on." : $"Press {QuickKeyLabel()} in game to search.");
+            if (_config.QuickSearchKey != 0 && !_config.QuickSearchCtrl && !_config.QuickSearchShift && !_config.QuickSearchAlt)
+            {
+                using (ImRaii.PushColor(ImGuiCol.Text, Palette.Soon))
+                    ImGui.TextWrapped("Without Ctrl, Shift or Alt the key also opens the search while you type in chat.");
+            }
         }
 
         Widgets.Group("One character per region", "Used to log in on the right character when a venue is in another region. Write it as Name@World.");
@@ -463,6 +627,12 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.SameLine(0, 8f * gs);
         if (Widgets.PillButton("##lvenues", FontAwesomeIcon.ExternalLinkAlt, "FFXIV Venues", Palette.FFXIVenue))
             Dalamud.Utility.Util.OpenLink("https://ffxivvenues.com/");
+        ImGui.SameLine(0, 8f * gs);
+        if (Widgets.PillButton("##lvenuescope", FontAwesomeIcon.ExternalLinkAlt, "VenueScope", Palette.VenueScope))
+            Dalamud.Utility.Util.OpenLink("https://api.venuescope.club/");
+        ImGui.SameLine(0, 8f * gs);
+        if (Widgets.PillButton("##lxivpf", FontAwesomeIcon.ExternalLinkAlt, "xivpf.com", Palette.PartyFinder, "Party Finder ads"))
+            Dalamud.Utility.Util.OpenLink("https://xivpf.com/listings");
 
         Widgets.Group("Contact", "A bug, an idea, or your event in the spotlight.");
         if (Widgets.PillButton("##ldiscord", FontAwesomeIcon.CommentDots, "Discord", Palette.Accent))

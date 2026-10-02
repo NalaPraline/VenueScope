@@ -1,6 +1,6 @@
 # VenueScope
 
-Browse FFXIV community events from [Partake.gg](https://www.partake.gg/) and [FFXIV Venues](https://ffxivvenues.com/) directly in-game.
+Browse FFXIV community events from [Partake.gg](https://www.partake.gg/), [FFXIV Venues](https://ffxivvenues.com/), venue ads from the Party Finder (through [xivpf.com](https://xivpf.com/)) and venues posting on VenueScope, directly in-game.
 
 ![VenueScope](https://s.nalapraline.com/ShareX/2026/03/vsscreen.png)
 
@@ -8,9 +8,13 @@ Browse FFXIV community events from [Partake.gg](https://www.partake.gg/) and [FF
 
 - Browse upcoming and live events filtered by data center
 - Filter by time: All / Live Now / Today
-- Filter by source: Partake · FFXIV Venue
+- Filter by source: Partake · FFXIV Venues · VenueScope · Party Finder
 - Filter by tags and search by title, location, or tag
-- Click event titles to open them in your browser
+- Full event page with the description, pictures, DJ lineup and activities
+- Animated banners and logos (GIF, APNG, WebP)
+- Quick search: bind a key, type a venue name, press Enter to travel
+- Themes and your own accent color
+- Syncshell card when you walk into a venue, with one-click copy
 - One-click in-game teleport to venue locations via [Lifestream](https://github.com/NightmareXIV/Lifestream)
 - Toast notifications for new events on your data center
 - Auto-refresh on a configurable interval (default: 5 min)

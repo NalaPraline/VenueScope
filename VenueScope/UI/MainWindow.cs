@@ -21,6 +21,7 @@ public sealed class MainWindow : Window, IDisposable
     private readonly PartakeService          _partake;
     private readonly Configuration           _config;
     private readonly Action                  _openConfig;
+    public static Action?                    OnOpenChangelog;
     private readonly SpotlightService        _spotlights;
     private readonly Action<SpotlightVenue>  _openSpotlight;
 
@@ -111,6 +112,7 @@ public sealed class MainWindow : Window, IDisposable
             0 => EventSource.Partake,
             1 => EventSource.FFXIVenue,
             2 => EventSource.VenueScope,
+            3 => EventSource.PartyFinder,
             _ => null,
         };
 
@@ -216,8 +218,14 @@ public sealed class MainWindow : Window, IDisposable
         float lineH = ImGui.GetTextLineHeight();
         var   dl    = ImGui.GetWindowDrawList();
 
-        if (ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.GetIO().KeyCtrl && ImGui.IsKeyPressed(ImGuiKey.F))
+        // imgui never sees ctrl+f while the game has the keyboard, so ask the game instead
+        bool ctrlF = Plugin.KeyState[Dalamud.Game.ClientState.Keys.VirtualKey.CONTROL] && Plugin.KeyState[Dalamud.Game.ClientState.Keys.VirtualKey.F];
+        if (ctrlF && !_ctrlFHeld && ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows))
+        {
+            Plugin.KeyState[Dalamud.Game.ClientState.Keys.VirtualKey.F] = false;
             _focusSearch = true;
+        }
+        _ctrlFHeld = ctrlF;
 
         ImGui.Dummy(new Vector2(0f, 2f * gs));
         float rowY  = ImGui.GetCursorPosY();
@@ -232,7 +240,7 @@ public sealed class MainWindow : Window, IDisposable
 
         float iconW   = h;
         float dcW     = DcPillWidth(h);
-        float rightW  = dcW + gap + iconW + gap + iconW;
+        float rightW  = dcW + gap + iconW + gap + iconW + gap + iconW;
         float avail   = ImGui.GetContentRegionAvail().X;
         float searchW = Math.Clamp(avail - brandW - rightW - 24f * gs, 160f * gs, 480f * gs);
 
@@ -301,6 +309,10 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.SetCursorScreenPos(new Vector2(rightX + dcW + gap + iconW + gap, rowP0.Y));
+        if (Widgets.GhostIcon("##news", FontAwesomeIcon.Gift, "What's new", iconW))
+            OnOpenChangelog?.Invoke();
+
+        ImGui.SetCursorScreenPos(new Vector2(rightX + dcW + gap + (iconW + gap) * 2, rowP0.Y));
         if (Widgets.GhostIcon("##cfg", FontAwesomeIcon.Cog, "Settings", iconW))
             _openConfig();
 
@@ -438,6 +450,8 @@ public sealed class MainWindow : Window, IDisposable
     private int _partakeCount;
     private int _venueCount;
     private int _ownerCount;
+    private int _pfCount;
+    private bool _ctrlFHeld;
     private Dictionary<string, int> _tagCounts = new();
     private string _tagSearch = string.Empty;
 
@@ -466,6 +480,149 @@ public sealed class MainWindow : Window, IDisposable
         _partakeCount = bySource.Count(e => e.Source == EventSource.Partake);
         _venueCount   = bySource.Count(e => e.Source == EventSource.FFXIVenue);
         _ownerCount   = bySource.Count(e => e.Source == EventSource.VenueScope);
+        _pfCount      = bySource.Count(e => e.Source == EventSource.PartyFinder);
+    }
+
+    private static void DrawComingSoon()
+    {
+        float gs    = ImGuiHelpers.GlobalScale;
+        float avail = ImGui.GetContentRegionAvail().X;
+        float w     = Math.Min(avail - 16f * gs, 440f * gs);
+        float left  = ImGui.GetCursorPosX() + (avail - w) / 2f;
+        var   dl    = ImGui.GetWindowDrawList();
+        var   pink  = Palette.VenueScope;
+
+        ImGui.Dummy(new Vector2(0f, 36f * gs));
+        float mark = 46f * gs;
+        ImGui.SetCursorPosX(left + (w - mark) / 2f);
+        var mp = ImGui.GetCursorScreenPos();
+        dl.AddRectFilled(mp, mp + new Vector2(mark), Palette.U(pink with { W = 0.16f }), 12f * gs);
+        Widgets.DrawIconCentered(dl, FontAwesomeIcon.Store, mp + new Vector2(mark / 2f), pink, 1.2f);
+        ImGui.Dummy(new Vector2(mark));
+        ImGui.Dummy(new Vector2(0f, 8f * gs));
+
+        var title = "Coming soon";
+        var tsz   = Widgets.MeasureWithSize(title, 1.3f);
+        ImGui.SetCursorPosX(left + (w - tsz.X) / 2f);
+        Widgets.TextWithSize(dl, ImGui.GetCursorScreenPos(), Palette.Text, title, 1.3f);
+        ImGui.Dummy(tsz);
+        ImGui.Dummy(new Vector2(0f, 4f * gs));
+
+        ImGui.SetCursorPosX(left);
+        ImGui.PushTextWrapPos(left + w);
+        ImGui.PushStyleColor(ImGuiCol.Text, Palette.TextSoft);
+        ImGui.TextWrapped("Venue owners will soon post their own nights here: who plays and when, the games, the giveaways, all on one page.");
+        ImGui.PopStyleColor();
+        ImGui.PopTextWrapPos();
+        ImGui.Dummy(new Vector2(0f, 12f * gs));
+
+        ImGui.SetCursorPosX(left);
+        DrawExampleNight(w);
+        ImGui.Dummy(new Vector2(0f, 10f * gs));
+
+        var foot = "Run a venue? Sign ups open soon on my.venuescope.club";
+        var fsz  = ImGui.CalcTextSize(foot);
+        ImGui.SetCursorPosX(left + Math.Max(0f, (w - fsz.X) / 2f));
+        ImGui.PushStyleColor(ImGuiCol.Text, Palette.Muted);
+        ImGui.TextUnformatted(foot);
+        ImGui.PopStyleColor();
+    }
+
+    private static readonly (string Name, string Time, string Logo)[] ExampleLineup =
+    [
+        ("8bit",    "21:00", "https://resources.nocturnvenue.com/img/logo-6b624603.png"),
+        ("Cyanna",  "22:30", "https://resources.nocturnvenue.com/img/cyanna-121e0333.webp"),
+        ("Aemilia", "00:00", "https://resources.nocturnvenue.com/img/aemilia-dc97288b.png"),
+    ];
+
+    private static readonly (string Kind, string Name, string Time, string About)[] ExampleGames =
+    [
+        ("blackjack", "Blackjack",    "21:30", "Mira deals, bets from 50k to 2M, 5 card Charlie pays double"),
+        ("bingo",     "Bingo",        "22:00", "The house puts 1M in the pot, 50k a card, line and full card"),
+        ("raffle",    "Raffle",       "23:00", "Tickets at the bar for 10k, three winners drawn on stage"),
+        ("glam",      "Glam contest", "23:30", "Theme Under the stars, 5M and a photo shoot for the winner"),
+    ];
+
+    private static void DrawExampleNight(float w)
+    {
+        float gs  = ImGuiHelpers.GlobalScale;
+        var   dl  = ImGui.GetWindowDrawList();
+        var   p0  = ImGui.GetCursorScreenPos();
+        float lh  = ImGui.GetTextLineHeight();
+        float pad = 12f * gs;
+        var   pink = Palette.VenueScope;
+
+        float bannerH = 118f * gs;
+        float logo    = 26f * gs;
+        float rowH    = 34f * gs;
+        float lineupH = logo + 8f * gs;
+        float h = bannerH + pad + lh + 6f * gs + lineupH + pad + lh + 6f * gs + rowH * ExampleGames.Length + pad;
+
+        dl.AddRectFilled(p0, p0 + new Vector2(w, h), Palette.U(Palette.Card), 12f * gs);
+
+        var b1 = p0 + new Vector2(w, bannerH);
+        uint top = Palette.U(new Vector4(0.10f, 0.07f, 0.24f, 1f));
+        uint bottom = Palette.U(new Vector4(0.25f, 0.10f, 0.32f, 1f));
+        dl.AddRectFilledMultiColor(p0, b1, top, top, bottom, bottom);
+        var rng = new Random(7);
+        for (int i = 0; i < 40; i++)
+            dl.AddCircleFilled(p0 + new Vector2(rng.Next(0, (int)w), rng.Next(0, (int)(bannerH * 0.7f))), (rng.Next(0, 3) == 0 ? 1.5f : 1f) * gs,
+                Palette.U(new Vector4(1f, 1f, 1f, 0.35f + rng.Next(0, 60) / 100f)));
+        var moon = new Vector2(p0.X + w - 50f * gs, p0.Y + 36f * gs);
+        dl.AddCircleFilled(moon, 17f * gs, Palette.U(new Vector4(0.95f, 0.93f, 1f, 1f)), 32);
+        dl.AddCircleFilled(moon + new Vector2(-7f, -5f) * gs, 15f * gs, Palette.U(new Vector4(0.12f, 0.08f, 0.26f, 1f)), 32);
+
+        var pill = ImGui.CalcTextSize("Example") + new Vector2(16f, 4f) * gs;
+        var pp   = p0 + new Vector2(10f, 10f) * gs;
+        dl.AddRectFilled(pp, pp + pill, Palette.U(pink with { W = 0.28f }), pill.Y / 2f);
+        dl.AddText(pp + new Vector2(8f, 2f) * gs, Palette.U(Vector4.Lerp(pink, Palette.Text, 0.4f)), "Example");
+
+        var titleSz = Widgets.MeasureWithSize("Starlight Saturday", 1.25f);
+        Widgets.TextWithSize(dl, new Vector2(p0.X + pad, b1.Y - pad - lh - titleSz.Y), Palette.Text, "Starlight Saturday", 1.25f);
+        dl.AddText(new Vector2(p0.X + pad, b1.Y - pad - lh), Palette.U(Palette.TextSoft), "Moonlit Lounge  ·  Light, Lich  ·  Saturday 21:00");
+
+        float y = b1.Y + pad;
+        dl.AddText(new Vector2(p0.X + pad, y), Palette.U(Palette.AccentText), "Lineup");
+        y += lh + 6f * gs;
+        float x = p0.X + pad;
+        foreach (var (name, time, url) in ExampleLineup)
+        {
+            var nameSz = ImGui.CalcTextSize(name);
+            var timeSz = ImGui.CalcTextSize(time);
+            float pw = 4f * gs + logo + 8f * gs + nameSz.X + 8f * gs + timeSz.X + 12f * gs;
+            if (x + pw > p0.X + w - pad) break;
+            var cp = new Vector2(x, y);
+            dl.AddRectFilled(cp, cp + new Vector2(pw, lineupH), Palette.U(Palette.Surface), lineupH / 2f);
+            var lp  = cp + new Vector2(4f * gs, 4f * gs);
+            var tex = EventRenderer.IconCache?.GetOrQueue(url);
+            if (tex != null) dl.AddImageRounded(tex.Handle, lp, lp + new Vector2(logo), Vector2.Zero, Vector2.One, 0xFFFFFFFF, logo / 2f);
+            else             dl.AddCircleFilled(lp + new Vector2(logo / 2f), logo / 2f, Palette.U(Palette.SurfaceHover));
+            float ty = cp.Y + (lineupH - lh) / 2f;
+            dl.AddText(new Vector2(lp.X + logo + 8f * gs, ty), Palette.U(Palette.Text), name);
+            dl.AddText(new Vector2(lp.X + logo + 16f * gs + nameSz.X, ty), Palette.U(Palette.Muted), time);
+            x += pw + 6f * gs;
+        }
+        y += lineupH + pad;
+
+        dl.AddText(new Vector2(p0.X + pad, y), Palette.U(Palette.AccentText), "Tonight");
+        y += lh + 6f * gs;
+        float box   = 24f * gs;
+        float timeW = ImGui.CalcTextSize("00:00").X;
+        foreach (var (kind, name, time, about) in ExampleGames)
+        {
+            var col = ActivityStyle.Color(kind);
+            var bp  = new Vector2(p0.X + pad, y + (rowH - box) / 2f - 4f * gs);
+            dl.AddRectFilled(bp, bp + new Vector2(box), Palette.U(col with { W = 0.16f }), 7f * gs);
+            Widgets.DrawIconCentered(dl, ActivityStyle.Icon(kind), bp + new Vector2(box / 2f), col, 0.75f);
+            float tx = bp.X + box + 10f * gs;
+            dl.AddText(new Vector2(tx, y - 4f * gs), Palette.U(Palette.Text), name);
+            dl.AddText(new Vector2(p0.X + w - pad - timeW, y - 4f * gs), Palette.U(Palette.Muted), time);
+            dl.AddText(new Vector2(tx, y - 4f * gs + lh), Palette.U(Palette.Muted),
+                Widgets.Ellipsize(about, p0.X + w - pad - tx));
+            y += rowH;
+        }
+
+        ImGui.Dummy(new Vector2(w, h));
     }
 
     private List<VenueEvent> WithoutEnded(List<VenueEvent> events)
@@ -494,10 +651,11 @@ public sealed class MainWindow : Window, IDisposable
             TimeItem(TimeFilter.All,      FontAwesomeIcon.List,      null,         "All");
 
             Widgets.SectionLabel("Source");
-            SourceItem(null,                   FontAwesomeIcon.LayerGroup, null,               "All sources",  _partakeCount + _venueCount + _ownerCount);
-            SourceItem(EventSource.VenueScope, null,                       Palette.VenueScope, "VenueScope",   _ownerCount);
-            SourceItem(EventSource.Partake,    null,                       Palette.Partake,    "Partake",      _partakeCount);
-            SourceItem(EventSource.FFXIVenue,  null,                       Palette.FFXIVenue,  "FFXIV Venues", _venueCount);
+            SourceItem(null,                    FontAwesomeIcon.LayerGroup, null,                "All sources",  _partakeCount + _venueCount + _ownerCount);
+            SourceItem(EventSource.VenueScope,  null,                       Palette.VenueScope,  "VenueScope",   _ownerCount);
+            SourceItem(EventSource.Partake,     null,                       Palette.Partake,     "Partake",      _partakeCount);
+            SourceItem(EventSource.FFXIVenue,   null,                       Palette.FFXIVenue,   "FFXIV Venues", _venueCount);
+            SourceItem(EventSource.PartyFinder, null,                       Palette.PartyFinder, "Party Finder", _pfCount);
 
             Widgets.SectionLabel("Yours");
             int followed = _config.FavoritePartakeTeamIds.Count + _config.FavoriteEventIds.Count;
@@ -1035,6 +1193,12 @@ public sealed class MainWindow : Window, IDisposable
             return;
         }
 
+        if (_sourceFilter == EventSource.VenueScope && !_cache.CachedEvents.Any(e => e.Source == EventSource.VenueScope))
+        {
+            DrawComingSoon();
+            return;
+        }
+
         string cacheKey = BuildCacheKey();
         EnsureTagsBuilt(cacheKey);
         _cache.TagsByDc.TryGetValue(cacheKey, out var tags);
@@ -1054,10 +1218,11 @@ public sealed class MainWindow : Window, IDisposable
         };
         string srcLabel = _sourceFilter switch
         {
-            EventSource.Partake   => " on Partake",
-            EventSource.FFXIVenue => " on FFXIV Venues",
-            EventSource.VenueScope => " on VenueScope",
-            _                     => string.Empty,
+            EventSource.Partake     => " on Partake",
+            EventSource.FFXIVenue   => " on FFXIV Venues",
+            EventSource.VenueScope  => " on VenueScope",
+            EventSource.PartyFinder => " in the Party Finder",
+            _                       => string.Empty,
         };
         string countLabel = $"{searched.Count} event{(searched.Count != 1 ? "s" : "")}{(tfLabel.Length > 0 ? " " + tfLabel : "")}{srcLabel}";
         using (ImRaii.PushColor(ImGuiCol.Text, Palette.Muted))
@@ -1474,7 +1639,7 @@ public sealed class MainWindow : Window, IDisposable
         {
             dl.AddRectFilled(iTL, iBR, ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.13f }), 4f * gs);
             dl.AddRect(      iTL, iBR, ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.30f }), 4f * gs, 0, gs);
-            string initial = info.Source switch { EventSource.Partake => "P", EventSource.VenueScope => "S", _ => "V" };
+            string initial = info.Source switch { EventSource.Partake => "P", EventSource.VenueScope => "S", EventSource.PartyFinder => "F", _ => "V" };
             var    initSz  = ImGui.CalcTextSize(initial);
             dl.AddText(
                 iTL + new Vector2((iconSz - initSz.X) * 0.5f, (iconSz - initSz.Y) * 0.5f),
@@ -1551,6 +1716,8 @@ public sealed class MainWindow : Window, IDisposable
 
         if (_sourceFilter != null && !_favoritesOnly && !ignoreSource)
             events = events.Where(e => e.Source == _sourceFilter);
+        else if (!ignoreSource)
+            events = events.Where(e => e.Source != EventSource.PartyFinder);
 
         if (_favoritesOnly)
             events = events.Where(e =>

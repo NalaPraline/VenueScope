@@ -16,8 +16,8 @@ namespace VenueScope.Helpers;
 
 public static class EventRenderer
 {
-    private static readonly Vector4 ColTitle     = Palette.Text;
-    private static readonly Vector4 ColMuted     = Palette.Muted;
+    private static Vector4 ColTitle => Palette.Text;
+    private static Vector4 ColMuted => Palette.Muted;
     private static readonly Vector4 ColBullet    = new(0.32f, 0.30f, 0.40f, 1f);
 
     public static Services.TeamIconCache? IconCache;
@@ -93,6 +93,8 @@ public static class EventRenderer
         ImGui.BeginGroup();
         DrawTitleLine(ev, config, midW);
         DrawMetaLine(ev, cached, srcColor, midX, midW);
+        if (ev.Source == EventSource.PartyFinder && ev.Description.Length > 0)
+            DrawAdSnippet(ev, midW);
         if (cached.Tags.Length > 0)
             DrawTagLine(ev.Id, cached.Tags, midW);
         DrawViewLink(ev);
@@ -166,9 +168,22 @@ public static class EventRenderer
         }
 
         dl.AddRectFilled(tTL, tBR, Palette.U(srcColor with { W = 0.14f }), 8f * gs);
+        if (ev.Source == EventSource.PartyFinder)
+        {
+            Widgets.DrawIconCentered(dl, Dalamud.Interface.FontAwesomeIcon.Bullhorn, tTL + size / 2f, srcColor with { W = 0.85f }, 1.5f);
+            return;
+        }
         string initial = ev.Title.Length > 0 ? ev.Title[..1].ToUpperInvariant() : "?";
         var    initSz  = ImGui.CalcTextSize(initial) * 1.6f;
         Widgets.TextWithSize(dl, tTL + (size - initSz) / 2f, srcColor with { W = 0.75f }, initial, 1.6f);
+    }
+
+    private static void DrawAdSnippet(VenueEvent ev, float width)
+    {
+        var line = ev.Description.ReplaceLineEndings(" ").Trim();
+        while (line.Contains("  ")) line = line.Replace("  ", " ");
+        using (ImRaii.PushColor(ImGuiCol.Text, Palette.Muted))
+            ImGui.TextUnformatted(Widgets.Ellipsize($"\"{line}\"", width));
     }
 
     private static void DrawViewLink(VenueEvent ev)
@@ -284,6 +299,13 @@ public static class EventRenderer
                     : $"{cached.ServerDc} - {cached.Location}");
         }
 
+        if (ev.PlaceName.Length > 0)
+        {
+            Dot();
+            using (ImRaii.PushColor(ImGuiCol.Text, Palette.TextSoft))
+                ImGui.TextUnformatted($"at {ev.PlaceName}");
+        }
+
         if (ev.Source == EventSource.Partake && !string.IsNullOrEmpty(ev.Host))
         {
             Dot();
@@ -394,7 +416,9 @@ public static class EventRenderer
             bool lsAvail = Plugin.IsLifestreamAvailable();
             if (Widgets.PillButton($"##go{ev.Id}", Dalamud.Interface.FontAwesomeIcon.MapMarkerAlt, "Go",
                     lsAvail ? Palette.Accent : Palette.Muted,
-                    lsAvail ? $"Teleport: {ev.LifestreamCode}" : "Lifestream is not installed, click for details", btn))
+                    !lsAvail ? "Lifestream is not installed, click for details"
+                    : ev.Source == EventSource.PartyFinder ? $"Teleport: {ev.LifestreamCode} (read from the ad, it may be off)"
+                    : $"Teleport: {ev.LifestreamCode}", btn))
                 RequestTeleport(ev.Server, ev.LifestreamCode, config);
             ImGui.SameLine(0, gap);
         }
@@ -436,7 +460,7 @@ public static class EventRenderer
         if (!ImGui.BeginPopup($"##links{ev.Id}")) return;
 
         if (!string.IsNullOrEmpty(ev.EventUrl) &&
-            ImGui.MenuItem(ev.Source == EventSource.Partake ? $"Open on Partake##{ev.Id}lw" : $"Open website##{ev.Id}lw"))
+            ImGui.MenuItem(ev.EventUrl.Contains("partake.gg") ? $"Open on Partake##{ev.Id}lw" : $"Open website##{ev.Id}lw"))
             Util.OpenLink(ev.EventUrl);
         if (!string.IsNullOrEmpty(ev.WebsiteUrl) && ImGui.MenuItem($"Website##{ev.Id}lws"))
             Util.OpenLink(ev.WebsiteUrl);
@@ -752,9 +776,11 @@ public static class EventRenderer
         string venueRegion   = Plugin.GetServerRegion(server) ?? string.Empty;
         string currentRegion = Plugin.GetCurrentCharacterRegion() ?? venueRegion;
 
+        // everyone can visit Materia, and Materia players can visit North America
         bool needsSwitch = venueRegion != currentRegion
                         && !string.IsNullOrEmpty(venueRegion)
-                        && venueRegion != "Oceania";
+                        && venueRegion != "Oceania"
+                        && !(currentRegion == "Oceania" && venueRegion == "North America");
 
         if (!needsSwitch)
         {
@@ -784,6 +810,8 @@ public static class EventRenderer
 
             if (ok)
                 Plugin.BeginPendingTravel();
+            else
+                Plugin.ClearPendingTravel(config);
 
             Plugin.NotificationManager.AddNotification(new Notification
             {

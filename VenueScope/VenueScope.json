@@ -3,7 +3,7 @@
   "DalamudApiLevel": 15,
   "Name": "VenueScope",
   "Punchline": "Browse FFXIV community events in-game.",
-  "Description": "Browse FFXIV community events directly in-game. Filter by data center, time, and tags.\n\nCommands:\n/venuescope or /vs: open VenueScope",
+  "Description": "Browse FFXIV community events directly in-game: Partake, FFXIV Venues, Party Finder venue ads and events from venue owners. Filter by data center, time and tags, then travel there in one click.\n\nCommands:\n/venuescope or /vs: open VenueScope",
   "ApplicableVersion": "any",
   "Tags": [
     "events",

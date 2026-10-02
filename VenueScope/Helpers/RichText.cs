@@ -22,9 +22,9 @@ public static class RichText
     private sealed record Block(Kind Kind, List<Run> Runs, int Level = 0, string Marker = "");
 
     private static readonly Vector4 ColBody    = new(0.80f, 0.78f, 0.85f, 1f);
-    private static readonly Vector4 ColStrong  = Palette.Text;
+    private static Vector4 ColStrong => Palette.Text;
     private static readonly Vector4 ColItalic  = new(0.84f, 0.80f, 0.94f, 1f);
-    private static readonly Vector4 ColHeading = Palette.AccentText;
+    private static Vector4 ColHeading => Palette.AccentText;
     private static readonly Vector4 ColLink    = new(0.55f, 0.75f, 1.00f, 1f);
     private static readonly Vector4 ColCode    = new(0.70f, 0.86f, 0.78f, 1f);
     private static readonly Vector4 ColQuote   = new(0.66f, 0.63f, 0.72f, 1f);
@@ -349,6 +349,7 @@ public static class RichText
     {
         text = text.Replace("\r", "");
         text = Image.Replace(text, m => $"\n{ImageMark}{m.Groups[1].Value}\n");
+        // discord timestamps, people paste these everywhere
         text = DiscordTime.Replace(text, m => Stamp(m.Groups[1].Value, m.Groups[2].Value));
         text = DiscordEmoji.Replace(text, "");
         text = DiscordMention.Replace(text, "");
@@ -356,6 +357,7 @@ public static class RichText
         text = ColonEmoji.Replace(text, "");
         text = text.Replace("||", "");
 
+        // turns the fancy italic unicode letters back into normal ones
         text = text.Normalize(NormalizationForm.FormKC);
 
         var lines = text.Split('\n');
@@ -365,6 +367,7 @@ public static class RichText
             foreach (var c in lines[i])
                 sb.Append(Drawable(c) ? c : ' ');
             var l = sb.ToString();
+            // everyone loves their emoji borders, the game font does not
             if (l.Trim().Length == 0 && lines[i].Trim().Length > 0)
             {
                 lines[i] = "---";
