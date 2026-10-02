@@ -113,6 +113,8 @@ public class EventCacheService : IDisposable
             _config.LastKnownEventIds = JsonConvert.SerializeObject(all.Select(e => e.Id).ToList());
             _config.Save();
 
+            MergeTagSpellings(all);
+
             var byDc = new Dictionary<string, List<VenueEvent>>();
             var tagsDc = new Dictionary<string, SortedDictionary<string, bool>>();
 
@@ -148,6 +150,31 @@ public class EventCacheService : IDisposable
         {
             IsRefreshing = false;
             _lock.Release();
+        }
+    }
+
+    private static void MergeTagSpellings(List<VenueEvent> events)
+    {
+        var spellings = events
+            .SelectMany(e => e.Tags)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim())
+            .GroupBy(t => t, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(t => t)
+                      .OrderByDescending(s => s.Count())
+                      .ThenByDescending(s => char.IsUpper(s.Key[0]))
+                      .First().Key,
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var ev in events)
+        {
+            ev.Tags = ev.Tags
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Select(t => spellings[t.Trim()])
+                .Distinct()
+                .ToList();
         }
     }
 

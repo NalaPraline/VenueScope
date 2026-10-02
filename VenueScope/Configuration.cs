@@ -22,6 +22,9 @@ public class Configuration : IPluginConfiguration
 {
     public int Version { get; set; } = 1;
 
+    public bool         FollowCharacterRegion { get; set; } = true;
+    public string       LastAutoRegion        { get; set; } = string.Empty;
+
     public string       SelectedRegion      { get; set; } = string.Empty;
     public string       SelectedDataCenter  { get; set; } = string.Empty;
     public List<string> SelectedDataCenters { get; set; } = new();

@@ -1,297 +1,430 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
+using VenueScope.Helpers;
+using VenueScope.Models;
 using VenueScope.Services;
 
 namespace VenueScope.UI;
 
 public sealed class ConfigWindow : Window, IDisposable
 {
-    private readonly Configuration _config;
-    private readonly PartakeService _partake;
+    private readonly Configuration     _config;
+    private readonly PartakeService    _partake;
     private readonly EventCacheService _cache;
 
-    private static readonly string[] RegionNames = ["Japan", "North America", "Europe", "Oceania"];
+    private enum Page { General, DataCenters, Notifications, Display, Travel, Hidden, About }
+    private Page _page = Page.General;
 
-    private static readonly Vector4 ColAccent = new(0.40f, 0.65f, 1.00f, 1f);
-    private static readonly Vector4 ColSubtitle = new(0.55f, 0.55f, 0.65f, 1f);
-    private static readonly Vector4 ColGreen = new(0.22f, 0.80f, 0.44f, 1f);
-    private static readonly Vector4 ColRed = new(0.90f, 0.30f, 0.30f, 1f);
+    private static readonly string[] RegionNames      = ["Japan", "North America", "Europe", "Oceania"];
+    private static readonly string[] CharacterRegions = ["Japan", "North America", "Europe"];
+
+    internal static readonly Dictionary<string, int[]> FollowedRegions = new()
+    {
+        ["North America"] = [2, 4],
+        ["Europe"]        = [3, 4],
+        ["Japan"]         = [1, 4],
+        ["Oceania"]       = [4, 2],
+    };
+
+    private const float SidebarW = 170f;
 
     public ConfigWindow(Configuration config, PartakeService partake, EventCacheService cache)
-        : base("VenueScope Settings##cfg", ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoScrollbar)
+        : base("VenueScope Settings##cfg", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
-        _config = config;
+        _config  = config;
         _partake = partake;
-        _cache = cache;
+        _cache   = cache;
 
-        Size = new Vector2(480, 620);
-        SizeCondition = ImGuiCond.Always;
+        Size            = new Vector2(700, 500);
+        SizeCondition   = ImGuiCond.FirstUseEver;
+        SizeConstraints = new WindowSizeConstraints
+        {
+            MinimumSize = new Vector2(560, 400),
+            MaximumSize = new Vector2(1200, 1000),
+        };
+    }
+
+    public override void PreDraw()
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+        ImGui.PushStyleColor(ImGuiCol.WindowBg,       Palette.Window);
+        ImGui.PushStyleColor(ImGuiCol.ChildBg,        Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.PopupBg,        new Vector4(0.110f, 0.098f, 0.145f, 0.99f));
+        ImGui.PushStyleColor(ImGuiCol.Border,         Palette.Line);
+        ImGui.PushStyleColor(ImGuiCol.FrameBg,        Palette.Surface);
+        ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, Palette.SurfaceHover);
+        ImGui.PushStyleColor(ImGuiCol.FrameBgActive,  Palette.SurfaceHover);
+        ImGui.PushStyleColor(ImGuiCol.SliderGrab,       Palette.Accent);
+        ImGui.PushStyleColor(ImGuiCol.SliderGrabActive, Palette.AccentText);
+        ImGui.PushStyleColor(ImGuiCol.ScrollbarBg,    Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrab,  Palette.SurfaceHover);
+        ImGui.PushStyleColor(ImGuiCol.TextSelectedBg, Palette.Accent with { W = 0.30f });
+        ImGui.PushStyleColor(ImGuiCol.TitleBg,          Palette.Sidebar);
+        ImGui.PushStyleColor(ImGuiCol.TitleBgActive,    Palette.Sidebar);
+        ImGui.PushStyleColor(ImGuiCol.TitleBgCollapsed, Palette.Sidebar);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding,     7f * gs);
+        ImGui.PushStyleVar(ImGuiStyleVar.GrabRounding,      7f * gs);
+        ImGui.PushStyleVar(ImGuiStyleVar.ScrollbarRounding, 6f * gs);
+        ImGui.PushStyleVar(ImGuiStyleVar.ScrollbarSize,     10f * gs);
+    }
+
+    public override void PostDraw()
+    {
+        ImGui.PopStyleVar(4);
+        ImGui.PopStyleColor(15);
     }
 
     public override void Draw()
     {
-        using var scrollChild = ImRaii.Child("##cfgscroll", Vector2.Zero, false);
-        if (!scrollChild.Success) return;
+        float gs = ImGuiHelpers.GlobalScale;
+        using var padding = ImRaii.PushStyle(ImGuiStyleVar.FramePadding, new Vector2(10f, 6f) * gs);
 
-        DrawSectionSources();
-        ImGui.Spacing();
-        DrawSectionRefresh();
-        ImGui.Spacing();
-        DrawSectionNotifications();
-        ImGui.Spacing();
-        DrawSectionDisplay();
-        ImGui.Spacing();
-        DrawSectionCharacters();
-        ImGui.Spacing();
-        DrawSectionIntegrations();
-        ImGui.Spacing();
-        DrawSectionHiddenVenues();
-        ImGui.Spacing();
-        DrawSectionAbout();
+        using (ImRaii.PushColor(ImGuiCol.ChildBg, Palette.Sidebar))
+        using (var side = ImRaii.Child("##cfgside", new Vector2(SidebarW * gs, 0f), false, ImGuiWindowFlags.NoScrollbar))
+        {
+            if (side.Success)
+            {
+                ImGui.Dummy(new Vector2(0f, 6f * gs));
+                ImGui.Indent(6f * gs);
+                ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(0f, 2f * gs));
+                using (ImRaii.Child("##cfgnav", new Vector2(ImGui.GetContentRegionAvail().X - 6f * gs, 0f), false))
+                {
+                    Nav(Page.General,       FontAwesomeIcon.SlidersH,   "General");
+                    Nav(Page.DataCenters,   FontAwesomeIcon.Globe,      "Data centers");
+                    Nav(Page.Notifications, FontAwesomeIcon.Bell,       "Notifications");
+                    Nav(Page.Display,       FontAwesomeIcon.Eye,        "Display");
+                    Nav(Page.Travel,        FontAwesomeIcon.PlaneDeparture, "Travel");
+                    Nav(Page.Hidden,        FontAwesomeIcon.EyeSlash,   "Hidden venues", _config.HiddenVenueCache.Count);
+                    Nav(Page.About,         FontAwesomeIcon.InfoCircle, "About");
+                }
+                ImGui.PopStyleVar();
+                ImGui.Unindent(6f * gs);
+            }
+        }
+
+        ImGui.SameLine(0, 0);
+        var lp0 = ImGui.GetCursorScreenPos();
+        ImGui.GetWindowDrawList().AddLine(lp0, lp0 + new Vector2(0f, ImGui.GetContentRegionAvail().Y), Palette.U(Palette.Line));
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 18f * gs);
+
+        using var page = ImRaii.Child("##cfgpage", Vector2.Zero, false);
+        if (!page.Success) return;
+
+        ImGui.Dummy(new Vector2(0f, 6f * gs));
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X - 12f * gs);
+        switch (_page)
+        {
+            case Page.General:       DrawGeneral();       break;
+            case Page.DataCenters:   DrawDataCenters();   break;
+            case Page.Notifications: DrawNotifications(); break;
+            case Page.Display:       DrawDisplay();       break;
+            case Page.Travel:        DrawTravel();        break;
+            case Page.Hidden:        DrawHidden();        break;
+            case Page.About:         DrawAbout();         break;
+        }
+        ImGui.PopTextWrapPos();
+        ImGui.Dummy(new Vector2(0f, 12f * gs));
     }
 
-    private void DrawSectionSources()
+    private void Nav(Page page, FontAwesomeIcon icon, string label, int? count = null)
     {
-        if (!SectionHeader("  Sources")) return;
-        ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
+        if (Widgets.NavItem($"##nav{page}", icon, null, label, count is > 0 ? count : null, _page == page))
+            _page = page;
+    }
 
+    private float FieldWidth => Math.Min(420f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().X - 12f * ImGuiHelpers.GlobalScale);
+
+    private void DrawGeneral()
+    {
+        Widgets.PageTitle("General", "Where events come from and how often they are loaded again.");
+
+        Widgets.Group("Sources");
         var showP = _config.ShowPartakeEvents;
-        if (ImGui.Checkbox("Partake.gg", ref showP) && showP != _config.ShowPartakeEvents)
+        if (Widgets.Toggle("##srcp", "Partake", ref showP, "Community events posted on partake.gg"))
         {
             _config.ShowPartakeEvents = showP;
             _config.Save();
             Task.Run(_cache.RefreshNowAsync);
         }
-        ImGui.SameLine(0, 8);
-        ImGui.TextColored(ColSubtitle, "upcoming community events");
-
         var showF = _config.ShowFFXIVenueEvents;
-        if (ImGui.Checkbox("FFXIV Venues", ref showF) && showF != _config.ShowFFXIVenueEvents)
+        if (Widgets.Toggle("##srcf", "FFXIV Venues", ref showF, "Venues and their weekly openings from ffxivvenues.com"))
         {
             _config.ShowFFXIVenueEvents = showF;
             _config.Save();
             Task.Run(_cache.RefreshNowAsync);
         }
-        ImGui.SameLine(0, 8);
-        ImGui.TextColored(ColSubtitle, "recurring venue openings");
-
-        ImGui.Spacing();
-
         var showSpot = _config.ShowSpotlight;
-        if (ImGui.Checkbox("Spotlight banner", ref showSpot))
+        if (Widgets.Toggle("##spot", "Spotlight banner", ref showSpot, "Featured venues at the top of the list"))
         {
             _config.ShowSpotlight = showSpot;
             _config.Save();
         }
-        ImGui.SameLine(0, 8);
-        ImGui.TextColored(ColSubtitle, "featured venue at the top of the list");
 
-        ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
-    }
-
-    private void DrawSectionRefresh()
-    {
-        if (!SectionHeader("  Refresh")) return;
-        ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
-
-        ImGui.TextColored(ColSubtitle, "Auto-refresh interval");
-        ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+        Widgets.Group("Refresh");
+        ImGui.SetNextItemWidth(FieldWidth);
         var interval = _config.RefreshIntervalMinutes;
-        if (ImGui.SliderInt("minutes##interval", ref interval, 1, 60))
+        if (ImGui.SliderInt("##interval", ref interval, 1, 60, interval == 1 ? "Every minute" : $"Every {interval} minutes"))
         {
             _config.RefreshIntervalMinutes = interval;
             _config.Save();
         }
 
-        ImGui.Spacing();
-
-        var pCount = _cache.CachedEvents.Count(e => e.Source == Models.EventSource.Partake);
-        var fCount = _cache.CachedEvents.Count(e => e.Source == Models.EventSource.FFXIVenue);
-        ImGui.TextColored(ColSubtitle,
-            _cache.IsRefreshing
-                ? "  Refreshing..."
-                : $"  {pCount} Partake  ·  {fCount} FFXIV Venues events cached");
-
-        ImGui.Spacing();
-
-        using (ImRaii.PushColor(ImGuiCol.Button, new Vector4(0.18f, 0.36f, 0.60f, 0.85f)))
-        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.26f, 0.48f, 0.78f, 1.00f)))
-        using (ImRaii.PushColor(ImGuiCol.ButtonActive, new Vector4(0.34f, 0.60f, 0.96f, 1.00f)))
+        var pCount = _cache.CachedEvents.Count(e => e.Source == EventSource.Partake);
+        var fCount = _cache.CachedEvents.Count(e => e.Source == EventSource.FFXIVenue);
+        using (ImRaii.PushColor(ImGuiCol.Text, Palette.Muted))
         {
-            if (ImGui.Button("  Force refresh now  ##forcerefresh"))
-                Task.Run(_cache.RefreshNowAsync);
+            ImGui.TextUnformatted(_cache.IsRefreshing
+                ? "Loading..."
+                : $"{pCount} Partake events and {fCount} venue openings loaded.");
         }
 
-        ImGui.SameLine(0, 12);
-
-        using (ImRaii.PushColor(ImGuiCol.Button, new Vector4(0.45f, 0.28f, 0.08f, 0.85f)))
-        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.62f, 0.38f, 0.10f, 1.00f)))
-        using (ImRaii.PushColor(ImGuiCol.ButtonActive, new Vector4(0.80f, 0.50f, 0.12f, 1.00f)))
+        ImGui.Dummy(new Vector2(0f, 2f * ImGuiHelpers.GlobalScale));
+        if (Widgets.PillButton("##force", FontAwesomeIcon.Sync, "Refresh now", Palette.Accent))
+            Task.Run(_cache.RefreshNowAsync);
+        ImGui.SameLine(0, 8f * ImGuiHelpers.GlobalScale);
+        if (Widgets.PillButton("##resetnew", FontAwesomeIcon.Certificate, "Show everything as new", Palette.Soon,
+                "Forgets which events you already saw. Every event gets the NEW badge on the next refresh."))
         {
-            if (ImGui.Button("  Reset NEW badges  ##resetnew"))
+            _config.LastKnownEventIds = "[]";
+            _config.Save();
+        }
+    }
+
+    private void DrawDataCenters()
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+        Widgets.PageTitle("Data centers", "Which data centers the list shows when it opens.");
+
+        var follow = _config.FollowCharacterRegion;
+        if (Widgets.Toggle("##follow", "Follow my character", ref follow, "Picks the data centers of the region you are playing in"))
+        {
+            _config.FollowCharacterRegion = follow;
+            _config.LastAutoRegion        = string.Empty;
+            _config.Save();
+        }
+
+        ImGui.Dummy(new Vector2(0f, 4f * gs));
+        foreach (var (region, wanted) in FollowedRegions)
+        {
+            var names = _partake.DataCenters.Values
+                .Where(dc => wanted.Contains(dc.Region))
+                .OrderBy(dc => Array.IndexOf(wanted, dc.Region)).ThenBy(dc => dc.Name)
+                .Select(dc => dc.Name);
+            bool here = region == Plugin.GetCurrentCharacterRegion();
+            using (ImRaii.PushColor(ImGuiCol.Text, here ? Palette.AccentText : Palette.TextSoft))
+                ImGui.TextUnformatted(here ? $"{region}  (you are here)" : region);
+            ImGui.SameLine(190f * gs);
+            using (ImRaii.PushColor(ImGuiCol.Text, Palette.Muted))
+                ImGui.TextUnformatted(string.Join(", ", names));
+        }
+
+        ImGui.Dummy(new Vector2(0f, 6f * gs));
+        using (ImRaii.PushColor(ImGuiCol.Text, Palette.Muted))
+            ImGui.TextWrapped("You can still pick other data centers at the top of the list. Your pick stays until you play in another region.");
+
+        if (_config.FollowCharacterRegion)
+        {
+            ImGui.Dummy(new Vector2(0f, 4f * gs));
+            if (Widgets.PillButton("##applyregion", FontAwesomeIcon.Crosshairs, "Use my region now", Palette.Accent))
             {
-                _config.LastKnownEventIds = "[]";
+                _config.LastAutoRegion = string.Empty;
                 _config.Save();
             }
         }
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("Clears the list of known event IDs.\nAll events will appear as [NEW] on next refresh.");
-
-        ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }
 
-    private void DrawSectionNotifications()
+    private void DrawNotifications()
     {
-        if (!SectionHeader("  Notifications")) return;
-        ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
+        float gs = ImGuiHelpers.GlobalScale;
+        Widgets.PageTitle("Notifications", "Small messages in the corner of the screen.");
 
         var enable = _config.EnableNotifications;
-        if (ImGui.Checkbox("Enable notifications for new events", ref enable))
+        if (Widgets.Toggle("##notif", "New events", ref enable, "Tells you when an event appears on your data centers"))
         {
             _config.EnableNotifications = enable;
             _config.Save();
         }
-
-        ImGui.Spacing();
-
         var syncPopup = _config.EnableSyncshellPopup;
-        if (ImGui.Checkbox("Show syncshell popup when entering a venue", ref syncPopup))
+        if (Widgets.Toggle("##syncpop", "Syncshell when entering a venue", ref syncPopup, "Shows the venue's syncshell when you walk into its house"))
         {
             _config.EnableSyncshellPopup = syncPopup;
             _config.Save();
         }
 
-        if (_config.EnableNotifications)
+        if (!_config.EnableNotifications) return;
+
+        Widgets.Group("Only for these data centers", "None picked means every data center.");
+        for (int regionIdx = 1; regionIdx <= RegionNames.Length; regionIdx++)
         {
-            ImGui.Spacing();
-            ImGui.TextColored(ColSubtitle, "Notify for data centers:");
-            ImGui.TextColored(ColSubtitle with { W = 0.6f }, "(leave all unchecked to notify for every DC)");
-            ImGui.Spacing();
+            var dcs = _partake.DataCenters.Values
+                .Where(dc => dc.Region == regionIdx)
+                .OrderBy(dc => dc.Name)
+                .ToList();
+            if (dcs.Count == 0) continue;
 
-            for (int regionIdx = 1; regionIdx <= RegionNames.Length; regionIdx++)
+            ImGui.AlignTextToFramePadding();
+            using (ImRaii.PushColor(ImGuiCol.Text, Palette.TextSoft))
+                ImGui.TextUnformatted(RegionNames[regionIdx - 1]);
+            ImGui.SameLine(130f * gs);
+
+            foreach (var dc in dcs)
             {
-                var regionName = RegionNames[regionIdx - 1];
-                var dcs = _partake.DataCenters.Values
-                    .Where(dc => dc.Region == regionIdx)
-                    .OrderBy(dc => dc.Name)
-                    .ToList();
-                if (dcs.Count == 0) continue;
-
-                ImGui.TextColored(ColAccent, regionName);
-                ImGui.SameLine(0, 8);
-
-                foreach (var dc in dcs)
+                bool picked = _config.NotifyForDataCenters.Contains(dc.Name);
+                if (Widgets.Chip($"##notif{dc.Name}", dc.Name, picked))
                 {
-                    bool checked_ = _config.NotifyForDataCenters.Contains(dc.Name);
-                    if (ImGui.Checkbox($"{dc.Name}##{dc.Name}notif", ref checked_))
-                    {
-                        if (checked_) _config.NotifyForDataCenters.Add(dc.Name);
-                        else _config.NotifyForDataCenters.Remove(dc.Name);
-                        _config.Save();
-                    }
-                    ImGui.SameLine(0, 6);
+                    if (picked) _config.NotifyForDataCenters.Remove(dc.Name);
+                    else        _config.NotifyForDataCenters.Add(dc.Name);
+                    _config.Save();
                 }
-                ImGui.NewLine();
+                ImGui.SameLine(0, 4f * gs);
             }
+            ImGui.NewLine();
         }
-
-        ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
     }
 
-    private void DrawSectionDisplay()
+    private void DrawDisplay()
     {
-        if (!SectionHeader("  Display")) return;
-        ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
+        Widgets.PageTitle("Display", "What the list looks like when it opens.");
 
         var hideEnded = _config.HideEndedEvents;
-        if (ImGui.Checkbox("Hide ended events", ref hideEnded))
+        if (Widgets.Toggle("##hideended", "Hide ended events", ref hideEnded, "Events whose end time has passed disappear from the list"))
         {
             _config.HideEndedEvents = hideEnded;
             _config.Save();
             _cache.TagsByDc.Clear();
         }
 
-        ImGui.Spacing();
-        ImGui.TextColored(ColSubtitle, "Default time filter on open:");
-        if (DrawRadio("All##deftf", _config.DefaultTimeFilter, 0)) { _config.DefaultTimeFilter = 0; _config.Save(); }
-        ImGui.SameLine(0, 12);
-        if (DrawRadio("Live Now##deftf", _config.DefaultTimeFilter, 1)) { _config.DefaultTimeFilter = 1; _config.Save(); }
-        ImGui.SameLine(0, 12);
-        if (DrawRadio("Today##deftf", _config.DefaultTimeFilter, 2)) { _config.DefaultTimeFilter = 2; _config.Save(); }
+        Widgets.Group("Start on");
+        int time = Math.Clamp(_config.DefaultTimeFilter, 0, 2);
+        if (Widgets.Segment("##deftf", ["Everything", "Live now", "Today"], ref time, FieldWidth))
+        {
+            _config.DefaultTimeFilter = time;
+            _config.Save();
+        }
 
-        ImGui.Spacing();
-        ImGui.TextColored(ColSubtitle, "Default source filter on open:");
-        if (DrawRadio("All##defsrc", _config.DefaultSourceFilter, -1)) { _config.DefaultSourceFilter = -1; _config.Save(); }
-        ImGui.SameLine(0, 12);
-        if (DrawRadio("Partake##defsrc", _config.DefaultSourceFilter, 0)) { _config.DefaultSourceFilter = 0; _config.Save(); }
-        ImGui.SameLine(0, 12);
-        if (DrawRadio("FFXIV Venues##defsrc", _config.DefaultSourceFilter, 1)) { _config.DefaultSourceFilter = 1; _config.Save(); }
-
-        ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
+        Widgets.Group("Source shown first");
+        int source = _config.DefaultSourceFilter + 1;
+        if (Widgets.Segment("##defsrc", ["Both", "Partake", "FFXIV Venues"], ref source, FieldWidth))
+        {
+            _config.DefaultSourceFilter = source - 1;
+            _config.Save();
+        }
     }
 
-    private static readonly string[] CharacterRegions = ["Japan", "North America", "Europe"];
-
-    private void DrawSectionCharacters()
+    private void DrawTravel()
     {
-        if (!SectionHeader("  Characters")) return;
-        ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
+        float gs = ImGuiHelpers.GlobalScale;
+        Widgets.PageTitle("Travel", "The Go button uses Lifestream to take you to the venue, switching character when the venue is in another region.");
 
-        ImGui.TextColored(ColSubtitle, "One character per region for automatic switching.");
-        ImGui.TextColored(ColSubtitle with { W = 0.6f }, "Format:  Character Name@World  (e.g. Nala Praline@Moogle)");
-        ImGui.Spacing();
+        bool lifestream = Plugin.IsLifestreamAvailable();
+        var  col        = lifestream ? Palette.Live : Palette.Danger;
+        var  p0         = ImGui.GetCursorScreenPos();
+        string status   = lifestream ? "Lifestream is installed" : "Lifestream is not installed";
+        var  ts         = ImGui.CalcTextSize(status);
+        var  size       = new Vector2(ts.X + 30f * gs, ts.Y + 10f * gs);
+        var  dl         = ImGui.GetWindowDrawList();
+        dl.AddRectFilled(p0, p0 + size, Palette.U(col with { W = 0.14f }), size.Y / 2f);
+        dl.AddCircleFilled(p0 + new Vector2(12f * gs, size.Y / 2f), 3.5f * gs, Palette.U(col));
+        dl.AddText(p0 + new Vector2(22f * gs, 5f * gs), Palette.U(col), status);
+        ImGui.Dummy(size);
+        if (!lifestream)
+        {
+            using (ImRaii.PushColor(ImGuiCol.Text, Palette.Muted))
+                ImGui.TextWrapped("Install it from the Dalamud plugin installer to use the Go button.");
+        }
+
+        Widgets.Group("One character per region", "Used to log in on the right character when a venue is in another region. Write it as Name@World.");
+
+        var player     = Plugin.ObjectTable.LocalPlayer;
+        string current = player != null ? $"{player.Name.TextValue}@{player.HomeWorld.Value.Name.ExtractText()}" : string.Empty;
+        string? currentRegion = Plugin.GetCurrentCharacterRegion();
 
         foreach (var region in CharacterRegions)
         {
-            ImGui.TextColored(ColAccent, region);
-            ImGui.SameLine(120f * ImGuiHelpers.GlobalScale);
-            ImGui.SetNextItemWidth(260f * ImGuiHelpers.GlobalScale);
+            ImGui.AlignTextToFramePadding();
+            using (ImRaii.PushColor(ImGuiCol.Text, Palette.TextSoft))
+                ImGui.TextUnformatted(region);
+            ImGui.SameLine(130f * gs);
 
-            _config.CharacterPerRegion.TryGetValue(region, out var current);
-            var buf = current ?? string.Empty;
-            if (ImGui.InputText($"##{region}char", ref buf, 64))
+            _config.CharacterPerRegion.TryGetValue(region, out var saved);
+            var buf = saved ?? string.Empty;
+            ImGui.SetNextItemWidth(Math.Min(260f * gs, ImGui.GetContentRegionAvail().X - 60f * gs));
+            if (ImGui.InputTextWithHint($"##{region}char", "Nala Praline@Moogle", ref buf, 64))
             {
-                if (string.IsNullOrWhiteSpace(buf))
-                    _config.CharacterPerRegion.Remove(region);
-                else
-                    _config.CharacterPerRegion[region] = buf;
+                if (string.IsNullOrWhiteSpace(buf)) _config.CharacterPerRegion.Remove(region);
+                else                                _config.CharacterPerRegion[region] = buf;
                 _config.Save();
             }
+
+            if (current.Length > 0 && region == currentRegion && buf != current)
+            {
+                ImGui.SameLine(0, 6f * gs);
+                if (Widgets.IconButton($"##usecurrent{region}", FontAwesomeIcon.UserCheck, $"Use {current}"))
+                {
+                    _config.CharacterPerRegion[region] = current;
+                    _config.Save();
+                }
+            }
+        }
+    }
+
+    private void DrawHidden()
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+        Widgets.PageTitle("Hidden venues", "Venues you hid from the list. Their events come back when you unhide them.");
+
+        if (_config.HiddenVenueCache.Count == 0)
+        {
+            using (ImRaii.PushColor(ImGuiCol.Text, Palette.Muted))
+                ImGui.TextUnformatted("Nothing hidden. Use the ... menu on an event to hide a venue.");
+            return;
         }
 
-        ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
+        foreach (var (key, info) in _config.HiddenVenueCache.ToList())
+        {
+            var   srcColor = info.Source == EventSource.Partake ? Palette.Partake : Palette.FFXIVenue;
+            float rowH     = ImGui.GetFrameHeight() + 10f * gs;
+            float width    = ImGui.GetContentRegionAvail().X - 12f * gs;
+            var   p0       = ImGui.GetCursorScreenPos();
+            var   dl       = ImGui.GetWindowDrawList();
+
+            dl.AddRectFilled(p0, p0 + new Vector2(width, rowH), Palette.U(Palette.Card), 8f * gs);
+            dl.AddCircleFilled(p0 + new Vector2(14f * gs, rowH / 2f), 3.5f * gs, Palette.U(srcColor));
+
+            string name  = !string.IsNullOrEmpty(info.Name) ? info.Name : key;
+            string where = string.Join(", ", new[] { info.Server, info.DataCenter }.Where(s => !string.IsNullOrEmpty(s)));
+            float  textY = p0.Y + (rowH - ImGui.GetTextLineHeight()) / 2f;
+            float  btnW  = Widgets.PillWidth(FontAwesomeIcon.Eye, "Unhide");
+            string shown = Widgets.Ellipsize(name, width - btnW - 160f * gs);
+            dl.AddText(new Vector2(p0.X + 28f * gs, textY), Palette.U(Palette.Text), shown);
+            if (where.Length > 0)
+                dl.AddText(new Vector2(p0.X + 36f * gs + ImGui.CalcTextSize(shown).X, textY), Palette.U(Palette.Muted), where);
+
+            ImGui.SetCursorScreenPos(new Vector2(p0.X + width - btnW - 6f * gs, p0.Y + 5f * gs));
+            if (Widgets.PillButton($"##unhide{key}", FontAwesomeIcon.Eye, "Unhide", Palette.Live, string.Empty, ImGui.GetFrameHeight()))
+            {
+                if (info.Source == EventSource.Partake) _config.HiddenPartakeTeamIds.Remove(info.TeamId);
+                else                                    _config.HiddenVenueIds.Remove(info.VenueId);
+                _config.HiddenVenueCache.Remove(key);
+                _config.Save();
+                _cache.TagsByDc.Clear();
+            }
+
+            ImGui.SetCursorScreenPos(new Vector2(p0.X, p0.Y + rowH + 4f * gs));
+        }
     }
 
-    private static void DrawSectionIntegrations()
+    private void DrawAbout()
     {
-        if (!SectionHeader("  Integrations")) return;
-        ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
-
-        bool lifestreamAvail = Plugin.IsLifestreamAvailable();
-        var color = lifestreamAvail ? ColGreen : ColRed;
-        var label = lifestreamAvail ? "Lifestream installed" : "Lifestream not installed";
-        var hint = lifestreamAvail
-            ? "Teleport buttons will use Lifestream to travel directly to venue locations."
-            : "Install Lifestream from the Dalamud plugin installer to enable in-game teleport buttons.";
-
-        using (ImRaii.PushColor(ImGuiCol.Text, color))
-            ImGui.TextUnformatted(label);
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(hint);
-
-        ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
-    }
-
-    private void DrawSectionAbout()
-    {
-        if (!SectionHeader("  About")) return;
-        ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
+        float gs = ImGuiHelpers.GlobalScale;
 
         string version = "unknown";
         try
@@ -302,90 +435,21 @@ public sealed class ConfigWindow : Window, IDisposable
         }
         catch { }
 
-        ImGui.TextColored(ColSubtitle, $"VenueScope  v{version}");
-        ImGui.Spacing();
+        Widgets.PageTitle("VenueScope", $"Version {version}. Community events and venues of FFXIV, in game.");
 
-        DrawLinkButton("Partake.gg", "https://www.partake.gg/", new Vector4(0.33f, 0.58f, 0.96f, 1f));
-        ImGui.SameLine(0, 8);
-        DrawLinkButton("FFXIV Venues", "https://ffxivvenues.com/", new Vector4(0.62f, 0.32f, 0.92f, 1f));
+        Widgets.Group("Sources");
+        if (Widgets.PillButton("##lpartake", FontAwesomeIcon.ExternalLinkAlt, "Partake.gg", Palette.Partake))
+            Dalamud.Utility.Util.OpenLink("https://www.partake.gg/");
+        ImGui.SameLine(0, 8f * gs);
+        if (Widgets.PillButton("##lvenues", FontAwesomeIcon.ExternalLinkAlt, "FFXIV Venues", Palette.FFXIVenue))
+            Dalamud.Utility.Util.OpenLink("https://ffxivvenues.com/");
 
-        ImGui.Spacing();
-
-        DrawLinkButton("Discord", "https://discordid.netlify.app/?id=249633834646241281", new Vector4(0.44f, 0.54f, 0.90f, 1f));
-        ImGui.SameLine(0, 8);
-        DrawLinkButton("X / Twitter", "https://x.com/MoroOkami", new Vector4(0.80f, 0.80f, 0.80f, 1f));
-
-        ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
-    }
-
-    private void DrawSectionHiddenVenues()
-    {
-        if (!SectionHeader("  Hidden Venues")) return;
-        ImGui.Indent(12f * ImGuiHelpers.GlobalScale);
-
-        if (_config.HiddenVenueCache.Count == 0)
-        {
-            ImGui.TextColored(ColSubtitle, "No hidden venues.");
-            ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
-            return;
-        }
-
-        foreach (var (key, info) in _config.HiddenVenueCache.ToList())
-        {
-            var srcColor = info.Source == Models.EventSource.Partake
-                ? new Vector4(0.33f, 0.58f, 0.96f, 1f)
-                : new Vector4(0.62f, 0.32f, 0.92f, 1f);
-            string srcLabel = info.Source == Models.EventSource.Partake ? "[Partake]" : "[FFXIV Venues]";
-
-            using (ImRaii.PushColor(ImGuiCol.Text, srcColor with { W = 0.65f }))
-                ImGui.TextUnformatted(srcLabel);
-            ImGui.SameLine(0, 6);
-
-            string displayName = !string.IsNullOrEmpty(info.Name) ? info.Name : key;
-            ImGui.TextUnformatted(displayName);
-            ImGui.SameLine(0, 8);
-
-            using var c1 = ImRaii.PushColor(ImGuiCol.Button, new Vector4(0.14f, 0.28f, 0.14f, 0.70f));
-            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.20f, 0.42f, 0.20f, 0.90f));
-            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive, new Vector4(0.28f, 0.56f, 0.28f, 1.00f));
-            using var c4 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.50f, 1.00f, 0.55f, 1.00f));
-            if (ImGui.SmallButton($" Unhide ##{key}"))
-            {
-                if (info.Source == Models.EventSource.Partake)
-                    _config.HiddenPartakeTeamIds.Remove(info.TeamId);
-                else
-                    _config.HiddenVenueIds.Remove(info.VenueId);
-                _config.HiddenVenueCache.Remove(key);
-                _config.Save();
-                _cache.TagsByDc.Clear();
-            }
-        }
-
-        ImGui.Unindent(12f * ImGuiHelpers.GlobalScale);
-    }
-
-    private static bool SectionHeader(string label)
-    {
-        using var col = ImRaii.PushColor(ImGuiCol.Header, new Vector4(0.14f, 0.18f, 0.28f, 1f));
-        using var col2 = ImRaii.PushColor(ImGuiCol.HeaderHovered, new Vector4(0.20f, 0.25f, 0.38f, 1f));
-        using var col3 = ImRaii.PushColor(ImGuiCol.HeaderActive, new Vector4(0.26f, 0.32f, 0.50f, 1f));
-        using var col4 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.80f, 0.85f, 1.00f, 1f));
-        bool open = ImGui.CollapsingHeader(label, ImGuiTreeNodeFlags.DefaultOpen);
-        ImGui.Spacing();
-        return open;
-    }
-
-    private static bool DrawRadio(string label, int current, int value)
-        => ImGui.RadioButton(label, current == value);
-
-    private static void DrawLinkButton(string label, string url, Vector4 color)
-    {
-        using var c1 = ImRaii.PushColor(ImGuiCol.Button, color with { W = 0.25f });
-        using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, color with { W = 0.45f });
-        using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive, color with { W = 0.65f });
-        using var c4 = ImRaii.PushColor(ImGuiCol.Text, color);
-        if (ImGui.SmallButton($" {label} ##{label}"))
-            Dalamud.Utility.Util.OpenLink(url);
+        Widgets.Group("Contact", "A bug, an idea, or your event in the spotlight.");
+        if (Widgets.PillButton("##ldiscord", FontAwesomeIcon.CommentDots, "Discord", Palette.Accent))
+            Dalamud.Utility.Util.OpenLink("https://discordid.netlify.app/?id=249633834646241281");
+        ImGui.SameLine(0, 8f * gs);
+        if (Widgets.PillButton("##lx", FontAwesomeIcon.ExternalLinkAlt, "X / Twitter", Palette.TextSoft))
+            Dalamud.Utility.Util.OpenLink("https://x.com/MoroOkami");
     }
 
     public void Dispose() { }

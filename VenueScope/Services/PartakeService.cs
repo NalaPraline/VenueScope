@@ -121,7 +121,7 @@ public class PartakeService : IDisposable
             {{
                 events(game: ""final-fantasy-xiv"", sortBy: STARTS_AT, limit: 100, offset: {page * 100}) {{
                     id, title, locationId, ageRating, attendeeCount,
-                    startsAt, endsAt, location, tags,
+                    startsAt, endsAt, location, tags, attachments,
                     description(type: MARKDOWN)
                     team {{ id name description iconUrl discordUrl websiteUrl instagramUrl }}
                     locationData {{
@@ -150,7 +150,7 @@ public class PartakeService : IDisposable
                        startsBetween: {{ end: ""{now}"" }},
                        endsBetween:   {{ start: ""{now}"" }}) {{
                     id, title, locationId, ageRating, attendeeCount,
-                    startsAt, endsAt, location, tags,
+                    startsAt, endsAt, location, tags, attachments,
                     description(type: MARKDOWN)
                     team {{ id name description iconUrl discordUrl websiteUrl instagramUrl }}
                     locationData {{
@@ -204,8 +204,10 @@ public class PartakeService : IDisposable
                 InstagramUrl     = ev.Team?.InstagramUrl ?? string.Empty,
                 Source           = EventSource.Partake,
                 AttendeeCount    = ev.AttendeeCount,
+                Images           = ev.Attachments.Where(a => !string.IsNullOrWhiteSpace(a))
+                                                 .Select(a => $"https://cdn.partake.gg/assets/{a}").ToList(),
                 TeamName         = ev.Team?.Name    ?? string.Empty,
-                TeamDescription  = ev.Team?.Description ?? string.Empty,
+                TeamDescription  = Helpers.SlateText.ToMarkdown(ev.Team?.Description),
                 TeamIconUrl      = ev.Team?.IconUrl ?? string.Empty,
                 TeamId           = ev.Team?.Id ?? 0,
             });

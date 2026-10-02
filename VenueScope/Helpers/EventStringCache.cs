@@ -1,5 +1,6 @@
 using Humanizer;
 using System;
+using System.Globalization;
 using System.Collections.Generic;
 using VenueScope.Models;
 
@@ -40,8 +41,14 @@ public class EventStringCache
                 ? ev.InGameLocation
                 : string.Empty;
 
+            var startLocal = ev.StartTime.ToLocalTime();
+            var endLocal   = ev.EndTime?.ToLocalTime();
+
             cached = new CachedEventStrings
             {
+                TimeRange         = endLocal.HasValue ? $"{startLocal:HH:mm} → {endLocal.Value:HH:mm}" : startLocal.ToString("HH:mm"),
+                DayLabel          = DayLabel(startLocal),
+                StatusLabel       = StatusLabel(isLive, hasEnded, startUtc - utcNow),
                 StartsAtHumanized = startUtc.Humanize(),
                 EndsAtHumanized   = endUtc.HasValue ? endUtc.Value.Humanize() : "N/A",
                 StartsAtLocal     = ev.StartTime.ToLocalTime().ToString("dd/MM HH:mm"),
@@ -57,6 +64,24 @@ public class EventStringCache
             _cache[ev.Id] = cached;
         }
         return cached;
+    }
+
+    private static string DayLabel(DateTime local)
+    {
+        var today = DateTime.Now.Date;
+        if (local.Date == today)             return "Today";
+        if (local.Date == today.AddDays(1))  return "Tomorrow";
+        if (local.Date == today.AddDays(-1)) return "Yesterday";
+        return local.ToString("ddd d MMM", CultureInfo.InvariantCulture);
+    }
+
+    private static string StatusLabel(bool isLive, bool hasEnded, TimeSpan untilStart)
+    {
+        if (isLive)   return "Live";
+        if (hasEnded) return "Ended";
+        if (untilStart.TotalMinutes < 60) return $"in {Math.Max(1, (int)untilStart.TotalMinutes)} min";
+        if (untilStart.TotalHours < 24)   return $"in {(int)untilStart.TotalHours} h";
+        return string.Empty;
     }
 
     public string GetLastUpdateString(DateTime lastUpdate)

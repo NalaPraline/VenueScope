@@ -16,46 +16,14 @@ namespace VenueScope.Helpers;
 
 public static class EventRenderer
 {
-    private static readonly Vector4 ColPartake   = new(0.33f, 0.58f, 0.96f, 1f);
-    private static readonly Vector4 ColFFXIVenue = new(0.62f, 0.32f, 0.92f, 1f);
-
-    private static readonly Vector4 ColTitle     = new(0.94f, 0.94f, 1.00f, 1f);
-    private static readonly Vector4 ColMuted     = new(0.46f, 0.46f, 0.54f, 1f);
-    private static readonly Vector4 ColBullet    = new(0.28f, 0.28f, 0.36f, 1f);
-    private static readonly Vector4 ColLocation  = new(0.36f, 0.76f, 0.52f, 1f);
-    private static readonly Vector4 ColTimeLive  = new(0.20f, 0.86f, 0.42f, 1f);
-    private static readonly Vector4 ColTimeSoon  = new(1.00f, 0.66f, 0.12f, 1f);
-    private static readonly Vector4 ColTimeEnded = new(0.38f, 0.38f, 0.44f, 1f);
-    private static readonly Vector4 ColTimeFut   = new(0.52f, 0.74f, 1.00f, 1f);
-    private static readonly Vector4 ColNew       = new(1.00f, 0.80f, 0.16f, 1f);
-    private static readonly Vector4 ColCardBg    = new(0.13f, 0.13f, 0.20f, 1.00f);
+    private static readonly Vector4 ColTitle     = Palette.Text;
+    private static readonly Vector4 ColMuted     = Palette.Muted;
+    private static readonly Vector4 ColBullet    = new(0.32f, 0.30f, 0.40f, 1f);
 
     public static Services.TeamIconCache? IconCache;
     public static Services.FFXIVenueService? FlagService;
     public static Action<string>? OnHideVenue;
-
-    private static readonly HashSet<string> _openDescriptions = new();
-    private static readonly Regex ColonEmojiRx  = new(@":[A-Za-z0-9_+\-]+:",      RegexOptions.Compiled);
-    private static readonly Regex MdImageRx     = new(@"!\[[^\]]*\]\([^)]*\)",     RegexOptions.Compiled);
-    private static readonly Regex MdLinkRx      = new(@"\[([^\]]*)\]\([^)]*\)",    RegexOptions.Compiled);
-    private static readonly Regex MdBoldItalRx  = new(@"\*{1,3}([^*\n]*)\*{1,3}", RegexOptions.Compiled);
-    private static readonly Regex MdUnderRx     = new(@"_{1,2}([^_\n]*)_{1,2}",   RegexOptions.Compiled);
-    private static readonly Regex MdStrikeRx    = new(@"~~([^~\n]*)~~",            RegexOptions.Compiled);
-    private static readonly Regex MdCodeRx      = new(@"`([^`\n]*)`",              RegexOptions.Compiled);
-    private static readonly Regex MdHeadingRx   = new(@"^#{1,6}\s*",              RegexOptions.Compiled);
-
-    private static string StripMarkdown(string s)
-    {
-        s = MdImageRx.Replace(s, "");
-        s = MdLinkRx.Replace(s, "$1");
-        s = MdBoldItalRx.Replace(s, "$1");
-        s = MdUnderRx.Replace(s, "$1");
-        s = MdStrikeRx.Replace(s, "$1");
-        s = MdCodeRx.Replace(s, "$1");
-        s = MdHeadingRx.Replace(s, "");
-        s = s.Replace("**", "").Replace("__", "").Replace("~~", "");
-        return s.Trim();
-    }
+    public static Action<VenueEvent>? OnOpenEvent;
 
     private static string _flagVenueId  = string.Empty;
     private static int    _flagCategory = 0;
@@ -92,73 +60,84 @@ public static class EventRenderer
         }
     }
 
-    private const float PadX    = 14f;
-    private const float PadY    = 7f;
-    private const float ThumbW  = 50f;
-    private const float ThumbH  = 42f;
-    private const float ThumbGap = 8f;
+    public static Action<string>?     OnTagClicked;
+    public static Func<string, bool>? IsTagSelected;
 
+    private const float CardPad   = 12f;
+    private const float ThumbW    = 104f;
+    private const float ThumbH    = 78f;
+    private const float SideWidth = 176f;
+
+    private static string _flagNextId = string.Empty;
 
     public static void DrawEventCard(VenueEvent ev, CachedEventStrings cached, Configuration config)
     {
-        float   gs         = ImGuiHelpers.GlobalScale;
-        Vector4 srcColor   = ev.Source == EventSource.Partake ? ColPartake : ColFFXIVenue;
-        Vector4 statusColor = StatusColor(cached);
+        float   gs       = ImGuiHelpers.GlobalScale;
+        Vector4 srcColor = ev.Source == EventSource.Partake ? Palette.Partake : Palette.FFXIVenue;
 
         float cardW  = ImGui.GetContentRegionAvail().X;
         var   cardTL = ImGui.GetCursorScreenPos();
         var   dl     = ImGui.GetWindowDrawList();
 
-        float padX      = PadX * gs;
-        float padY      = PadY * gs;
-        float thumbW    = ThumbW  * gs;
-        float thumbH    = ThumbH  * gs;
-        float thumbGap  = ThumbGap * gs;
-        float indent    = padX + thumbW + thumbGap;
+        float pad   = CardPad   * gs;
+        var   thumb = new Vector2(ThumbW, ThumbH) * gs;
+        float side  = SideWidth * gs;
+        float midX  = cardTL.X + pad + thumb.X + 14f * gs;
+        float sideX = cardTL.X + cardW - pad - side;
+        float midW  = Math.Max(60f * gs, sideX - 10f * gs - midX);
 
         dl.ChannelsSplit(2);
         dl.ChannelsSetCurrent(1);
 
-        ImGui.Dummy(new Vector2(0f, padY));
-
-        var dotCenter = cardTL + new Vector2(8f * gs, padY + ImGui.GetTextLineHeight() * 0.52f);
-        dl.AddCircleFilled(dotCenter, 3.5f * gs, ImGui.ColorConvertFloat4ToU32(statusColor));
-
-        ImGui.Indent(indent);
-
-        DrawTitleRow(ev, cached, srcColor, config);
-        DrawInfoRow(ev, cached, srcColor, statusColor);
+        ImGui.SetCursorScreenPos(new Vector2(midX, cardTL.Y + pad));
+        ImGui.BeginGroup();
+        DrawTitleLine(ev, config, midW);
+        DrawMetaLine(ev, cached, srcColor, midX, midW);
         if (cached.Tags.Length > 0)
-            DrawTags(ev.Id, cached.Tags, srcColor);
-        if (ev.Source == EventSource.Partake)
-        {
-            if (!string.IsNullOrEmpty(ev.EventUrl) || HasVisibleContent(ev.Description))
-                DrawDescription(ev);
-        }
-        else if (!string.IsNullOrEmpty(ev.Description) && HasVisibleContent(ev.Description))
-        {
-            DrawDescription(ev);
-        }
+            DrawTagLine(ev.Id, cached.Tags, midW);
+        DrawViewLink(ev);
+        ImGui.EndGroup();
+        float bottom = ImGui.GetItemRectMax().Y;
 
-        ImGui.Dummy(new Vector2(0f, padY));
-        ImGui.Unindent(indent);
+        float sideBottom = DrawSideColumn(ev, cached, config, new Vector2(sideX, cardTL.Y + pad), side);
+        bottom = Math.Max(bottom, Math.Max(sideBottom, cardTL.Y + pad + thumb.Y));
 
-        var cardBR = new Vector2(cardTL.X + cardW, ImGui.GetCursorScreenPos().Y);
+        var cardBR = new Vector2(cardTL.X + cardW, bottom + pad);
+
+        bool hovered = ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(cardTL, cardBR);
+        if (hovered && !ImGui.IsAnyItemHovered() && !ImGui.IsPopupOpen("", ImGuiPopupFlags.AnyPopupId))
+        {
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+                OnOpenEvent?.Invoke(ev);
+        }
 
         dl.ChannelsSetCurrent(0);
-
-        dl.AddRectFilled(cardTL, cardBR,
-            ImGui.ColorConvertFloat4ToU32(ColCardBg), 6f * gs);
-
+        dl.AddRectFilled(cardTL, cardBR, Palette.U(hovered ? Palette.CardHover : Palette.Card), 10f * gs);
         dl.AddRectFilled(
-            cardTL + new Vector2(0f, 4f * gs),
-            new Vector2(cardTL.X + 3f * gs, cardBR.Y - 4f * gs),
-            ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.90f }), 2f);
+            cardTL + new Vector2(0f, 10f * gs),
+            new Vector2(cardTL.X + 3f * gs, cardBR.Y - 10f * gs),
+            Palette.U(srcColor with { W = 0.85f }), 2f * gs);
 
-        float thumbTop  = cardTL.Y + padY;
-        float thumbLeft = cardTL.X + padX;
-        var   tTL       = new Vector2(thumbLeft, thumbTop);
-        var   tBR       = tTL + new Vector2(thumbW, thumbH);
+        DrawThumb(dl, ev, srcColor, new Vector2(cardTL.X + pad, cardTL.Y + pad), thumb);
+
+        dl.ChannelsMerge();
+
+        ImGui.SetCursorScreenPos(new Vector2(cardTL.X, cardBR.Y));
+        ImGui.Dummy(new Vector2(cardW, 0f));
+
+        if (_flagNextId == ev.Id)
+        {
+            _flagNextId = string.Empty;
+            OpenFlagPopup(ev.Id);
+        }
+        DrawFlagPopup();
+    }
+
+    private static void DrawThumb(ImDrawListPtr dl, VenueEvent ev, Vector4 srcColor, Vector2 tTL, Vector2 size)
+    {
+        float gs  = ImGuiHelpers.GlobalScale;
+        var   tBR = tTL + size;
 
         var icon = GetIcon(ev);
         if (icon != null)
@@ -168,521 +147,428 @@ public static class EventRenderer
             if (icon.Width > 0 && icon.Height > 0)
             {
                 float imgAspect = (float)icon.Width / icon.Height;
-                float boxAspect = thumbW / thumbH;
+                float boxAspect = size.X / size.Y;
                 if (imgAspect > boxAspect)
                 {
-                    float cropFraction = boxAspect / imgAspect;
-                    float offset = (1f - cropFraction) * 0.5f;
+                    float offset = (1f - boxAspect / imgAspect) * 0.5f;
                     uv0 = new Vector2(offset, 0f);
                     uv1 = new Vector2(1f - offset, 1f);
                 }
+                else if (imgAspect < boxAspect)
+                {
+                    float offset = (1f - imgAspect / boxAspect) * 0.5f;
+                    uv0 = new Vector2(0f, offset);
+                    uv1 = new Vector2(1f, 1f - offset);
+                }
             }
-
-            dl.AddImageRounded(icon.Handle, tTL, tBR, uv0, uv1, 0xFFFFFFFF, 4f * gs);
-            dl.AddRect(tTL, tBR,
-                ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.25f }), 4f * gs, 0, gs);
-        }
-        else
-        {
-            dl.AddRectFilled(tTL, tBR,
-                ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.13f }), 4f * gs);
-            dl.AddRect(tTL, tBR,
-                ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.30f }), 4f * gs, 0, gs);
-            string initial = ev.Source == EventSource.Partake ? "P" : "V";
-            var    initSz  = ImGui.CalcTextSize(initial);
-            dl.AddText(
-                tTL + new Vector2((thumbW - initSz.X) * 0.5f, (thumbH - initSz.Y) * 0.5f),
-                ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.40f }),
-                initial);
+            dl.AddImageRounded(icon.Handle, tTL, tBR, uv0, uv1, 0xFFFFFFFF, 8f * gs);
+            return;
         }
 
-        dl.ChannelsMerge();
-
-        DrawFlagPopup();
+        dl.AddRectFilled(tTL, tBR, Palette.U(srcColor with { W = 0.14f }), 8f * gs);
+        string initial = ev.Title.Length > 0 ? ev.Title[..1].ToUpperInvariant() : "?";
+        var    initSz  = ImGui.CalcTextSize(initial) * 1.6f;
+        Widgets.TextWithSize(dl, tTL + (size - initSz) / 2f, srcColor with { W = 0.75f }, initial, 1.6f);
     }
 
-    private static void DrawTitleRow(VenueEvent ev, CachedEventStrings cached, Vector4 srcColor, Configuration config)
+    private static void DrawViewLink(VenueEvent ev)
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+        ImGui.Dummy(new Vector2(0f, 1f * gs));
+
+        const string label = "View event";
+        var  textSz  = ImGui.CalcTextSize(label);
+        var  iconSz  = Widgets.IconSize(Dalamud.Interface.FontAwesomeIcon.ChevronRight, 0.7f);
+        var  p0      = ImGui.GetCursorScreenPos();
+        bool clicked = ImGui.InvisibleButton($"##view{ev.Id}", new Vector2(textSz.X + iconSz.X + 6f * gs, textSz.Y));
+        bool hovered = ImGui.IsItemHovered();
+        var  col     = hovered ? Palette.AccentText : Palette.Accent;
+        var  dl      = ImGui.GetWindowDrawList();
+
+        dl.AddText(p0, Palette.U(col), label);
+        Widgets.DrawIcon(dl, Dalamud.Interface.FontAwesomeIcon.ChevronRight,
+            p0 + new Vector2(textSz.X + 5f * gs, (textSz.Y - iconSz.Y) / 2f + 1f * gs), col, 0.7f);
+
+        if (hovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+        if (clicked) OnOpenEvent?.Invoke(ev);
+    }
+
+    private static bool IsFollowed(VenueEvent ev, Configuration config) =>
+        ev.Source == EventSource.Partake
+            ? ev.TeamId > 0 && config.FavoritePartakeTeamIds.Contains(ev.TeamId)
+            : config.FavoriteEventIds.Contains(ev.Id);
+
+    private static void DrawTitleLine(VenueEvent ev, Configuration config, float width)
     {
         float gs    = ImGuiHelpers.GlobalScale;
-        float actW  = CalcActionsWidth(ev);
-        float avail = ImGui.GetContentRegionAvail().X - actW - 6f * gs;
-        float lineH = ImGui.GetTextLineHeight();
+        bool  isFav = IsFollowed(ev, config);
+        float star  = ImGui.GetTextLineHeight() + 4f * gs;
+        float badge = ev.IsNew ? ImGui.CalcTextSize("NEW").X + 18f * gs : 0f;
 
-        var p0 = ImGui.GetCursorScreenPos();
-        ImGui.PushClipRect(p0, p0 + new Vector2(avail, lineH + 2f), true);
+        string title = ev.Title.Length > 0 ? ev.Title : "(no title)";
+        string shown = Widgets.Ellipsize(title, width - star - badge - 8f * gs);
 
-        using (ImRaii.PushColor(ImGuiCol.Text, ColTitle))
-            ImGui.TextUnformatted(ev.Title.Length > 0 ? ev.Title : "(no title)");
-
-        ImGui.PopClipRect();
-
-        if (ImGui.IsItemHovered() && !string.IsNullOrEmpty(ev.EventUrl))
+        using (ImRaii.PushColor(ImGuiCol.Text, Palette.Text))
+            ImGui.TextUnformatted(shown);
+        if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("Click to open");
-            if (ImGui.IsItemClicked())
-                Util.OpenLink(ev.EventUrl);
+            if (shown != title || !string.IsNullOrEmpty(ev.EventUrl))
+                ImGui.SetTooltip(string.IsNullOrEmpty(ev.EventUrl) ? title : $"{title}\nClick to open the event page");
+            if (!string.IsNullOrEmpty(ev.EventUrl))
+            {
+                ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+                if (ImGui.IsItemClicked())
+                    Util.OpenLink(ev.EventUrl);
+            }
         }
 
         if (ev.IsNew)
         {
-            ImGui.SameLine(0, 8);
-            using var _ = ImRaii.PushColor(ImGuiCol.Text, ColNew);
-            ImGui.TextUnformatted("NEW");
+            ImGui.SameLine(0, 8f * gs);
+            var p0 = ImGui.GetCursorScreenPos();
+            var ts = ImGui.CalcTextSize("NEW");
+            var sz = new Vector2(ts.X + 10f * gs, ts.Y);
+            ImGui.Dummy(sz);
+            var dl = ImGui.GetWindowDrawList();
+            dl.AddRectFilled(p0, p0 + sz, Palette.U(Palette.Gold with { W = 0.18f }), sz.Y / 2f);
+            dl.AddText(p0 + new Vector2(5f * gs, 0f), Palette.U(Palette.Gold), "NEW");
         }
 
-        DrawActions(ev, actW, config);
+        ImGui.SameLine(0, 6f * gs);
+        var  sp      = ImGui.GetCursorScreenPos();
+        bool clicked = ImGui.InvisibleButton($"##fav{ev.Id}", new Vector2(star, ImGui.GetTextLineHeight()));
+        bool hovered = ImGui.IsItemHovered();
+        Widgets.DrawIconCentered(ImGui.GetWindowDrawList(), Dalamud.Interface.FontAwesomeIcon.Star,
+            sp + new Vector2(star, ImGui.GetTextLineHeight()) / 2f,
+            isFav ? Palette.Gold : hovered ? Palette.TextSoft : Palette.Muted with { W = 0.55f }, 0.8f);
+        if (hovered)
+            ImGui.SetTooltip(FollowLabel(ev, isFav));
+        if (clicked)
+            ToggleFollow(ev, config);
     }
 
-    private static void DrawInfoRow(VenueEvent ev, CachedEventStrings cached,
-                                    Vector4 srcColor, Vector4 statusColor)
+    private static string FollowLabel(VenueEvent ev, bool isFav) =>
+        ev.Source == EventSource.Partake && !string.IsNullOrEmpty(ev.TeamName)
+            ? (isFav ? $"Unfollow {ev.TeamName}" : $"Follow {ev.TeamName} (all their events)")
+            : (isFav ? "Unfollow this venue" : "Follow this venue");
+
+    private static void DrawMetaLine(VenueEvent ev, CachedEventStrings cached, Vector4 srcColor, float left, float width)
     {
-        using (ImRaii.PushColor(ImGuiCol.Text, srcColor with { W = 0.50f }))
+        float gs  = ImGuiHelpers.GlobalScale;
+        var   top = ImGui.GetCursorScreenPos();
+        ImGui.PushClipRect(top, new Vector2(left + width, top.Y + ImGui.GetTextLineHeight() + 4f * gs), true);
+
+        using (ImRaii.PushColor(ImGuiCol.Text, srcColor))
             ImGui.TextUnformatted(ev.Source == EventSource.Partake ? "Partake" : "FFXIV Venues");
 
         if (!string.IsNullOrEmpty(cached.ServerDc))
         {
             Dot();
-            using (ImRaii.PushColor(ImGuiCol.Text, ColLocation))
+            using (ImRaii.PushColor(ImGuiCol.Text, Palette.TextSoft))
                 ImGui.TextUnformatted(cached.ServerDc);
         }
 
         if (!string.IsNullOrEmpty(cached.Location))
         {
             Dot();
-            float locW = ImGui.CalcTextSize(cached.Location).X;
-            using (ImRaii.PushColor(ImGuiCol.Text, ColLocation with { W = 0.70f }))
+            using (ImRaii.PushColor(ImGuiCol.Text, Palette.TextSoft))
+                ImGui.TextUnformatted(cached.Location);
+            if (ImGui.IsItemHovered())
             {
-                if (ImGui.Selectable($"{cached.Location}##loc{ev.Id}", false,
-                        ImGuiSelectableFlags.None, new Vector2(locW, 0)))
-                    ImGui.SetClipboardText(string.IsNullOrEmpty(cached.ServerDc)
-                        ? cached.Location
-                        : $"{cached.ServerDc} - {cached.Location}");
-                if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Click to copy location");
+                ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+                ImGui.SetTooltip("Click to copy the address");
             }
+            if (ImGui.IsItemClicked())
+                ImGui.SetClipboardText(string.IsNullOrEmpty(cached.ServerDc)
+                    ? cached.Location
+                    : $"{cached.ServerDc} - {cached.Location}");
         }
 
         if (ev.Source == EventSource.Partake && !string.IsNullOrEmpty(ev.Host))
         {
             Dot();
-            using (ImRaii.PushColor(ImGuiCol.Text, ColMuted))
+            using (ImRaii.PushColor(ImGuiCol.Text, Palette.Muted))
                 ImGui.TextUnformatted($"by {ev.Host}");
         }
 
         if (ev.AttendeeCount > 0)
         {
             Dot();
-            using (ImRaii.PushColor(ImGuiCol.Text, ColMuted))
-                ImGui.TextUnformatted($"{ev.AttendeeCount} attending");
+            using (ImRaii.PushColor(ImGuiCol.Text, Palette.Muted))
+                ImGui.TextUnformatted($"{ev.AttendeeCount} going");
         }
 
-        Dot();
-        string timeStr = $"{cached.StartsAtLocal} → {cached.EndsAtLocal}";
-        using (ImRaii.PushColor(ImGuiCol.Text, statusColor with { W = 0.85f }))
-            ImGui.TextUnformatted(timeStr);
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip($"Starts {cached.StartsAtHumanized}\nEnds {cached.EndsAtHumanized}");
+        ImGui.PopClipRect();
     }
 
-    private static void DrawTags(string evId, string[] tags, Vector4 srcColor)
+    private static void DrawTagLine(string evId, string[] tags, float width)
     {
-        ImGui.Spacing();
+        float gs = ImGuiHelpers.GlobalScale;
+        ImGui.Dummy(new Vector2(0f, 1f * gs));
+
+        float gap  = 4f * gs;
+        float used = 0f;
+        int   shown = 0;
         for (int i = 0; i < tags.Length; i++)
         {
-            if (i > 0) ImGui.SameLine(0, 4);
-            var col = GetTagColor(tags[i]);
-            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        col with { W = 0.28f });
-            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, col with { W = 0.48f });
-            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  col with { W = 0.60f });
-            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          col with { W = 1.00f });
-            ImGui.SmallButton($" {tags[i]} ##{evId}t{i}");
+            float w = Widgets.ChipWidth(tags[i]);
+            int   rest = tags.Length - i - 1;
+            float more = rest > 0 ? Widgets.ChipWidth($"+{rest}") + gap : 0f;
+            if (used + w + more > width && shown > 0) break;
+            used += w + gap;
+            shown++;
+        }
+
+        for (int i = 0; i < shown; i++)
+        {
+            if (i > 0) ImGui.SameLine(0, gap);
+            bool selected = IsTagSelected?.Invoke(tags[i]) ?? false;
+            if (Widgets.Chip($"##tag{evId}{i}", tags[i], selected))
+                OnTagClicked?.Invoke(tags[i]);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(selected ? $"Stop filtering by {tags[i]}" : $"Show only {tags[i]}");
+        }
+
+        if (shown < tags.Length)
+        {
+            ImGui.SameLine(0, gap);
+            Widgets.Chip($"##tagmore{evId}", $"+{tags.Length - shown}", false);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(string.Join("\n", tags[shown..]));
         }
     }
 
-    private static void DrawDescription(VenueEvent ev)
+    private static float DrawSideColumn(VenueEvent ev, CachedEventStrings cached, Configuration config, Vector2 topLeft, float width)
     {
-        ImGui.Spacing();
-        using var c1 = ImRaii.PushColor(ImGuiCol.Header,        new Vector4(0.14f, 0.14f, 0.22f, 0.00f));
-        using var c2 = ImRaii.PushColor(ImGuiCol.HeaderHovered, new Vector4(0.20f, 0.20f, 0.30f, 1.00f));
-
-        bool isOpen = _openDescriptions.Contains(ev.Id);
-        ImGui.SetNextItemOpen(isOpen, ImGuiCond.Always);
-        bool open;
-        using (ImRaii.PushColor(ImGuiCol.Text, ColMuted))
-            open = ImGui.CollapsingHeader($"Description##{ev.Id}");
-        if (open != isOpen)
-        {
-            if (open) _openDescriptions.Add(ev.Id);
-            else _openDescriptions.Remove(ev.Id);
-        }
-        if (open)
-        {
-            if (ev.Source == EventSource.Partake)
-                DrawTeamInfo(ev);
-            else
-                DrawDescriptionContent(ev.Description);
-        }
-    }
-
-    private static readonly Vector4 ColDescSection = new(0.90f, 0.75f, 0.40f, 1f);
-    private static readonly Vector4 ColDescBody    = new(0.78f, 0.78f, 0.82f, 1f);
-    private static readonly Vector4 ColDescLink    = new(0.55f, 0.75f, 1.00f, 1f);
-
-    private static void DrawDescriptionContent(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return;
         float gs    = ImGuiHelpers.GlobalScale;
+        var   dl    = ImGui.GetWindowDrawList();
+        float right = topLeft.X + width;
+        float y     = topLeft.Y;
         float lineH = ImGui.GetTextLineHeight();
-        ImGui.Spacing();
-        bool lastWasBlank = true;
-        foreach (var raw in text.Split('\n'))
+
+        if (cached.IsLive)
         {
-            var line = ColonEmojiRx.Replace(raw.TrimEnd(), "");
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                if (!lastWasBlank)
-                {
-                    ImGui.Dummy(new Vector2(0f, lineH * 0.35f));
-                    lastWasBlank = true;
-                }
-                continue;
-            }
-            lastWasBlank = false;
-            var trimmed = StripMarkdown(line.Trim());
-            if (string.IsNullOrWhiteSpace(trimmed)) continue;
-            if (IsDecorativeLine(trimmed))
-            {
-                ImGui.Separator();
-                continue;
-            }
-            if (trimmed.Length < 60 && trimmed.EndsWith(':'))
-            {
-                ImGui.Spacing();
-                using (ImRaii.PushColor(ImGuiCol.Text, ColDescSection))
-                    ImGui.TextUnformatted(trimmed);
-                continue;
-            }
-            if (!trimmed.Contains(' ') &&
-                (trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
-                 trimmed.StartsWith("http://",  StringComparison.OrdinalIgnoreCase)))
-            {
-                var tl = trimmed.ToLowerInvariant();
-                if (tl.EndsWith(".png") || tl.EndsWith(".jpg") || tl.EndsWith(".jpeg") ||
-                    tl.EndsWith(".gif") || tl.EndsWith(".webp")) continue;
-                using (ImRaii.PushColor(ImGuiCol.Text, ColDescLink))
-                    ImGui.TextUnformatted(trimmed);
-                if (ImGui.IsItemHovered())
-                {
-                    ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-                    ImGui.SetTooltip(trimmed);
-                }
-                if (ImGui.IsItemClicked())
-                    Util.OpenLink(trimmed);
-                continue;
-            }
-            using (ImRaii.PushColor(ImGuiCol.Text, ColDescBody))
-                ImGui.TextWrapped(trimmed);
+            var ts = ImGui.CalcTextSize("Live");
+            var sz = new Vector2(ts.X + 22f * gs, ts.Y + 2f * gs);
+            var p0 = new Vector2(right - sz.X, y);
+            dl.AddRectFilled(p0, p0 + sz, Palette.U(Palette.Live with { W = 0.14f }), sz.Y / 2f);
+            dl.AddCircleFilled(p0 + new Vector2(8f * gs, sz.Y / 2f), 3f * gs, Palette.U(Palette.Live));
+            dl.AddText(p0 + new Vector2(15f * gs, 1f * gs), Palette.U(Palette.Live), "Live");
+            y += sz.Y + 3f * gs;
         }
-        ImGui.Spacing();
+        else if (!string.IsNullOrEmpty(cached.StatusLabel))
+        {
+            var col = cached.HasEnded ? Palette.Muted : cached.IsStartingSoon ? Palette.Soon : Palette.AccentText;
+            var ts  = ImGui.CalcTextSize(cached.StatusLabel);
+            dl.AddText(new Vector2(right - ts.X, y), Palette.U(col), cached.StatusLabel);
+            y += lineH + 2f * gs;
+        }
+
+        const float big = 1.2f;
+        var timeSz = Widgets.MeasureWithSize(cached.TimeRange, big);
+        Widgets.TextWithSize(dl, new Vector2(right - timeSz.X, y), cached.HasEnded ? Palette.Muted : Palette.Text, cached.TimeRange, big);
+        if (ImGui.IsMouseHoveringRect(new Vector2(right - timeSz.X, y), new Vector2(right, y + timeSz.Y)))
+            ImGui.SetTooltip($"Starts {cached.StartsAtHumanized}\nEnds {cached.EndsAtHumanized}");
+        y += timeSz.Y + 1f * gs;
+
+        var daySz = ImGui.CalcTextSize(cached.DayLabel);
+        dl.AddText(new Vector2(right - daySz.X, y), Palette.U(Palette.Muted), cached.DayLabel);
+        y += lineH + 7f * gs;
+
+        float btn  = ImGui.GetFrameHeight();
+        float gap  = 4f * gs;
+        bool  hasLinks = !string.IsNullOrEmpty(ev.EventUrl) || !string.IsNullOrEmpty(ev.DiscordUrl)
+                      || !string.IsNullOrEmpty(ev.WebsiteUrl) || !string.IsNullOrEmpty(ev.InstagramUrl);
+        bool  housing  = IsHousingLocation(ev.LifestreamCode);
+        bool  canGo    = !string.IsNullOrEmpty(ev.LifestreamCode);
+
+        float rowW = btn;
+        if (hasLinks) rowW += btn + gap;
+        if (housing)  rowW += btn + gap;
+        if (canGo)    rowW += Widgets.PillWidth(Dalamud.Interface.FontAwesomeIcon.MapMarkerAlt, "Go") + gap;
+
+        ImGui.SetCursorScreenPos(new Vector2(right - rowW, y));
+
+        if (canGo)
+        {
+            bool lsAvail = Plugin.IsLifestreamAvailable();
+            if (Widgets.PillButton($"##go{ev.Id}", Dalamud.Interface.FontAwesomeIcon.MapMarkerAlt, "Go",
+                    lsAvail ? Palette.Accent : Palette.Muted,
+                    lsAvail ? $"Teleport: {ev.LifestreamCode}" : "Lifestream is not installed, click for details", btn))
+                RequestTeleport(ev.Server, ev.LifestreamCode, config);
+            ImGui.SameLine(0, gap);
+        }
+
+        if (hasLinks)
+        {
+            if (Widgets.IconButton($"##links{ev.Id}btn", Dalamud.Interface.FontAwesomeIcon.Link, "Links", size: btn))
+                ImGui.OpenPopup($"##links{ev.Id}");
+            DrawLinksPopup(ev);
+            ImGui.SameLine(0, gap);
+        }
+
+        if (housing)
+        {
+            bool known = ev.LinkedSynchell != null;
+            if (Widgets.IconButton($"##cwls{ev.Id}btn", Dalamud.Interface.FontAwesomeIcon.Users,
+                    known ? "Syncshell" : "Syncshell (none registered yet)",
+                    known ? Palette.FFXIVenue : null, size: btn))
+                ImGui.OpenPopup($"##cwls{ev.Id}");
+
+            ImGui.SetNextWindowSize(new Vector2(300f * gs, 0f));
+            if (ImGui.BeginPopup($"##cwls{ev.Id}"))
+            {
+                DrawCwlsPopupContent(ev.LinkedSynchell, ev.Id);
+                ImGui.EndPopup();
+            }
+            ImGui.SameLine(0, gap);
+        }
+
+        if (Widgets.IconButton($"##more{ev.Id}btn", Dalamud.Interface.FontAwesomeIcon.EllipsisH, "More", size: btn))
+            ImGui.OpenPopup($"##more{ev.Id}");
+        DrawMorePopup(ev, cached, config);
+
+        return ImGui.GetItemRectMax().Y;
     }
 
-    private static void DrawTeamInfo(VenueEvent ev)
+    private static void DrawLinksPopup(VenueEvent ev)
     {
-        ImGui.Spacing();
+        if (!ImGui.BeginPopup($"##links{ev.Id}")) return;
 
-        if (!string.IsNullOrEmpty(ev.TeamDescription))
-        {
-            using (ImRaii.PushColor(ImGuiCol.Text, ColDescBody))
-                ImGui.TextWrapped(ev.TeamDescription);
-            ImGui.Spacing();
-        }
-
-        if (HasVisibleContent(ev.Description))
-            DrawDescriptionContent(ev.Description);
-
-        using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.80f, 0.65f, 0.20f, 1f)))
-            ImGui.TextWrapped("Descriptions may not display correctly. View the full event on Partake for accurate formatting.");
-        if (ImGui.IsItemHovered() && !string.IsNullOrEmpty(ev.EventUrl))
-        {
-            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-            ImGui.SetTooltip(ev.EventUrl);
-        }
-        if (ImGui.IsItemClicked() && !string.IsNullOrEmpty(ev.EventUrl))
+        if (!string.IsNullOrEmpty(ev.EventUrl) &&
+            ImGui.MenuItem(ev.Source == EventSource.Partake ? $"Open on Partake##{ev.Id}lw" : $"Open website##{ev.Id}lw"))
             Util.OpenLink(ev.EventUrl);
-        ImGui.Spacing();
+        if (!string.IsNullOrEmpty(ev.WebsiteUrl) && ImGui.MenuItem($"Website##{ev.Id}lws"))
+            Util.OpenLink(ev.WebsiteUrl);
+        if (!string.IsNullOrEmpty(ev.InstagramUrl) && ImGui.MenuItem($"Instagram##{ev.Id}lig"))
+            Util.OpenLink(ev.InstagramUrl);
+        if (!string.IsNullOrEmpty(ev.DiscordUrl) && ImGui.MenuItem($"Discord server##{ev.Id}ld"))
+            Util.OpenLink(ev.DiscordUrl);
+
+        ImGui.EndPopup();
     }
 
-    private static bool HasVisibleContent(string text)
+    private static void DrawMorePopup(VenueEvent ev, CachedEventStrings cached, Configuration config)
     {
-        foreach (var raw in text.Split('\n'))
+        if (!ImGui.BeginPopup($"##more{ev.Id}")) return;
+
+        bool isFav = IsFollowed(ev, config);
+        if (ImGui.MenuItem($"{FollowLabel(ev, isFav)}##{ev.Id}mfav"))
+            ToggleFollow(ev, config);
+
+        if (!string.IsNullOrEmpty(cached.Location) && ImGui.MenuItem($"Copy the address##{ev.Id}mcopy"))
+            ImGui.SetClipboardText(string.IsNullOrEmpty(cached.ServerDc) ? cached.Location : $"{cached.ServerDc} - {cached.Location}");
+
+        ImGui.Separator();
+
+        using (ImRaii.PushColor(ImGuiCol.Text, Palette.Danger))
         {
-            var line = ColonEmojiRx.Replace(raw.TrimEnd(), "");
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            var stripped = StripMarkdown(line.Trim());
-            if (string.IsNullOrWhiteSpace(stripped)) continue;
-            if (IsDecorativeLine(stripped)) continue;
-            var tl = stripped.ToLowerInvariant();
-            if (!stripped.Contains(' ') &&
-                (tl.EndsWith(".png") || tl.EndsWith(".jpg") || tl.EndsWith(".jpeg") ||
-                 tl.EndsWith(".gif") || tl.EndsWith(".webp"))) continue;
-            return true;
+            if (ImGui.MenuItem($"Hide this venue##{ev.Id}mhide"))
+                HideVenue(ev, config);
+            if (ev.Source == EventSource.FFXIVenue && ImGui.MenuItem($"Report this venue##{ev.Id}mflag"))
+                _flagNextId = ev.Id;
         }
-        return false;
+
+        ImGui.EndPopup();
     }
 
-    private static bool IsDecorativeLine(string line)
+    private static void ToggleFollow(VenueEvent ev, Configuration config)
     {
-        if (line.Length < 1) return false;
-        foreach (char c in line)
-            if (char.IsLetterOrDigit(c)) return false;
-        return true;
+        bool isFav = IsFollowed(ev, config);
+        if (ev.Source == EventSource.Partake && ev.TeamId > 0)
+        {
+            string key = $"partake:{ev.TeamId}";
+            if (isFav)
+            {
+                config.FavoritePartakeTeamIds.Remove(ev.TeamId);
+                config.FavoriteVenueCache.Remove(key);
+            }
+            else
+            {
+                config.FavoritePartakeTeamIds.Add(ev.TeamId);
+                config.FavoriteVenueCache[key] = new FavoriteVenueInfo
+                {
+                    TeamId     = ev.TeamId,
+                    Name       = ev.TeamName,
+                    Server     = ev.Server,
+                    DataCenter = ev.DataCenter,
+                    IconUrl    = !string.IsNullOrEmpty(ev.TeamIconUrl) ? ev.TeamIconUrl : ev.BannerUrl,
+                    Source     = EventSource.Partake,
+                };
+            }
+        }
+        else if (ev.Source == EventSource.FFXIVenue)
+        {
+            string key = $"ffxiv:{ev.Id}";
+            if (isFav)
+            {
+                config.FavoriteEventIds.Remove(ev.Id);
+                config.FavoriteVenueCache.Remove(key);
+            }
+            else
+            {
+                config.FavoriteEventIds.Add(ev.Id);
+                config.FavoriteVenueCache[key] = new FavoriteVenueInfo
+                {
+                    VenueId    = ev.Id,
+                    Name       = ev.Title,
+                    Server     = ev.Server,
+                    DataCenter = ev.DataCenter,
+                    IconUrl    = !string.IsNullOrEmpty(ev.BannerUrl) ? ev.BannerUrl : ev.TeamIconUrl,
+                    Source     = EventSource.FFXIVenue,
+                };
+            }
+        }
+        config.Save();
     }
 
-    private static readonly Vector4 ColFavOn  = new(1.00f, 0.82f, 0.14f, 1f);
-    private static readonly Vector4 ColFavOff = new(0.44f, 0.44f, 0.52f, 1f);
+    private static void HideVenue(VenueEvent ev, Configuration config)
+    {
+        if (ev.Source == EventSource.Partake && ev.TeamId > 0)
+        {
+            string key = $"partake:{ev.TeamId}";
+            config.FavoritePartakeTeamIds.Remove(ev.TeamId);
+            config.FavoriteVenueCache.Remove(key);
+            config.HiddenPartakeTeamIds.Add(ev.TeamId);
+            config.HiddenVenueCache[key] = new FavoriteVenueInfo
+            {
+                TeamId     = ev.TeamId,
+                Name       = ev.TeamName,
+                Server     = ev.Server,
+                DataCenter = ev.DataCenter,
+                IconUrl    = !string.IsNullOrEmpty(ev.TeamIconUrl) ? ev.TeamIconUrl : ev.BannerUrl,
+                Source     = EventSource.Partake,
+            };
+        }
+        else if (ev.Source == EventSource.FFXIVenue)
+        {
+            string key = $"ffxiv:{ev.Id}";
+            config.FavoriteEventIds.Remove(ev.Id);
+            config.FavoriteVenueCache.Remove(key);
+            config.HiddenVenueIds.Add(ev.Id);
+            config.HiddenVenueCache[key] = new FavoriteVenueInfo
+            {
+                VenueId    = ev.Id,
+                Name       = ev.Title,
+                Server     = ev.Server,
+                DataCenter = ev.DataCenter,
+                IconUrl    = !string.IsNullOrEmpty(ev.BannerUrl) ? ev.BannerUrl : ev.TeamIconUrl,
+                Source     = EventSource.FFXIVenue,
+            };
+        }
+
+        string displayName = ev.Source == EventSource.Partake
+            ? (string.IsNullOrEmpty(ev.TeamName) ? ev.Title : ev.TeamName)
+            : ev.Title;
+        config.Save();
+        OnHideVenue?.Invoke(displayName);
+    }
 
     private static readonly System.Text.RegularExpressions.Regex _wardRx = new(@"\bW(?:ard\s+)?\d+\b", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     private static readonly System.Text.RegularExpressions.Regex _plotRx = new(@"\bP(?:lot\s+)?\d+\b", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     private static bool IsHousingLocation(string code) =>
         !string.IsNullOrEmpty(code) && _wardRx.IsMatch(code) && _plotRx.IsMatch(code);
 
-    private static float CalcActionsWidth(VenueEvent ev)
-    {
-        float gs  = ImGuiHelpers.GlobalScale;
-        float spc = ImGui.GetStyle().ItemSpacing.X;
-        float w   = 32f * gs + spc;
-        w += 52f * gs + spc;
-        if (!string.IsNullOrEmpty(ev.EventUrl) || !string.IsNullOrEmpty(ev.DiscordUrl) || !string.IsNullOrEmpty(ev.WebsiteUrl) || !string.IsNullOrEmpty(ev.InstagramUrl)) w += 52f * gs + spc;
-        if (!string.IsNullOrEmpty(ev.LifestreamCode)) w += 90f * gs + spc;
-        if (ev.LinkedSynchell != null || IsHousingLocation(ev.LifestreamCode)) w += 60f * gs + spc;
-        w += 32f * gs + spc;
-        return w;
-    }
-
-    private static void DrawActions(VenueEvent ev, float reservedW, Configuration config)
-    {
-        if (reservedW <= 0f) return;
-
-        float rightEdge = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
-        ImGui.SameLine(rightEdge - reservedW);
-
-        bool isFav = ev.Source == EventSource.Partake
-            ? ev.TeamId > 0 && config.FavoritePartakeTeamIds.Contains(ev.TeamId)
-            : config.FavoriteEventIds.Contains(ev.Id);
-        using (ImRaii.PushColor(ImGuiCol.Button,        isFav ? new Vector4(0.28f, 0.22f, 0.04f, 0.70f) : new Vector4(0.14f, 0.14f, 0.20f, 0.60f)))
-        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, isFav ? new Vector4(0.40f, 0.32f, 0.06f, 0.90f) : new Vector4(0.22f, 0.22f, 0.30f, 0.90f)))
-        using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.50f, 0.40f, 0.08f, 1.00f)))
-        using (ImRaii.PushColor(ImGuiCol.Text,          isFav ? ColFavOn : ColFavOff))
-        {
-            if (ImGui.SmallButton($" {(isFav ? "★" : "☆")} ##{ev.Id}fav"))
-            {
-                if (ev.Source == EventSource.Partake && ev.TeamId > 0)
-                {
-                    string key = $"partake:{ev.TeamId}";
-                    if (isFav)
-                    {
-                        config.FavoritePartakeTeamIds.Remove(ev.TeamId);
-                        config.FavoriteVenueCache.Remove(key);
-                    }
-                    else
-                    {
-                        config.FavoritePartakeTeamIds.Add(ev.TeamId);
-                        config.FavoriteVenueCache[key] = new FavoriteVenueInfo
-                        {
-                            TeamId     = ev.TeamId,
-                            Name       = ev.TeamName,
-                            Server     = ev.Server,
-                            DataCenter = ev.DataCenter,
-                            IconUrl    = !string.IsNullOrEmpty(ev.TeamIconUrl) ? ev.TeamIconUrl : ev.BannerUrl,
-                            Source     = EventSource.Partake,
-                        };
-                    }
-                }
-                else if (ev.Source == EventSource.FFXIVenue)
-                {
-                    string key = $"ffxiv:{ev.Id}";
-                    if (isFav)
-                    {
-                        config.FavoriteEventIds.Remove(ev.Id);
-                        config.FavoriteVenueCache.Remove(key);
-                    }
-                    else
-                    {
-                        config.FavoriteEventIds.Add(ev.Id);
-                        config.FavoriteVenueCache[key] = new FavoriteVenueInfo
-                        {
-                            VenueId    = ev.Id,
-                            Name       = ev.Title,
-                            Server     = ev.Server,
-                            DataCenter = ev.DataCenter,
-                            IconUrl    = !string.IsNullOrEmpty(ev.BannerUrl) ? ev.BannerUrl : ev.TeamIconUrl,
-                            Source     = EventSource.FFXIVenue,
-                        };
-                    }
-                }
-                config.Save();
-            }
-        }
-        string favTooltip = ev.Source == EventSource.Partake && !string.IsNullOrEmpty(ev.TeamName)
-            ? (isFav ? $"Unfollow {ev.TeamName}" : $"Follow {ev.TeamName} (all their events)")
-            : (isFav ? "Unfollow this venue" : "Follow this venue");
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(favTooltip);
-        ImGui.SameLine(0, 4);
-
-        using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.25f, 0.12f, 0.12f, 0.60f)))
-        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.45f, 0.18f, 0.18f, 0.85f)))
-        using (ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.60f, 0.22f, 0.22f, 1.00f)))
-        using (ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.90f, 0.42f, 0.42f, 1.00f)))
-        {
-            if (ImGui.SmallButton($" Hide ##{ev.Id}hide"))
-            {
-                if (ev.Source == EventSource.Partake && ev.TeamId > 0)
-                {
-                    string key = $"partake:{ev.TeamId}";
-                    config.FavoritePartakeTeamIds.Remove(ev.TeamId);
-                    config.FavoriteVenueCache.Remove(key);
-                    config.HiddenPartakeTeamIds.Add(ev.TeamId);
-                    config.HiddenVenueCache[key] = new FavoriteVenueInfo
-                    {
-                        TeamId     = ev.TeamId,
-                        Name       = ev.TeamName,
-                        Server     = ev.Server,
-                        DataCenter = ev.DataCenter,
-                        IconUrl    = !string.IsNullOrEmpty(ev.TeamIconUrl) ? ev.TeamIconUrl : ev.BannerUrl,
-                        Source     = EventSource.Partake,
-                    };
-                }
-                else if (ev.Source == EventSource.FFXIVenue)
-                {
-                    string key = $"ffxiv:{ev.Id}";
-                    config.FavoriteEventIds.Remove(ev.Id);
-                    config.FavoriteVenueCache.Remove(key);
-                    config.HiddenVenueIds.Add(ev.Id);
-                    config.HiddenVenueCache[key] = new FavoriteVenueInfo
-                    {
-                        VenueId    = ev.Id,
-                        Name       = ev.Title,
-                        Server     = ev.Server,
-                        DataCenter = ev.DataCenter,
-                        IconUrl    = !string.IsNullOrEmpty(ev.BannerUrl) ? ev.BannerUrl : ev.TeamIconUrl,
-                        Source     = EventSource.FFXIVenue,
-                    };
-                }
-                string displayName = ev.Source == EventSource.Partake
-                    ? (string.IsNullOrEmpty(ev.TeamName) ? ev.Title : ev.TeamName)
-                    : ev.Title;
-                config.Save();
-                OnHideVenue?.Invoke(displayName);
-            }
-        }
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Hide this venue");
-        ImGui.SameLine(0, 4);
-
-        if (!string.IsNullOrEmpty(ev.EventUrl) || !string.IsNullOrEmpty(ev.DiscordUrl) || !string.IsNullOrEmpty(ev.WebsiteUrl) || !string.IsNullOrEmpty(ev.InstagramUrl))
-        {
-            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.16f, 0.30f, 0.54f, 0.65f));
-            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.22f, 0.42f, 0.72f, 0.90f));
-            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.28f, 0.52f, 0.88f, 1.00f));
-            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.72f, 0.86f, 1.00f, 1.00f));
-            if (ImGui.SmallButton($" Links ##{ev.Id}links"))
-                ImGui.OpenPopup($"##links{ev.Id}");
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Open links");
-            ImGui.SameLine(0, 4);
-
-            using (ImRaii.PushColor(ImGuiCol.PopupBg, new Vector4(0.11f, 0.11f, 0.18f, 1f)))
-            if (ImGui.BeginPopup($"##links{ev.Id}"))
-            {
-                if (!string.IsNullOrEmpty(ev.EventUrl))
-                {
-                    using var t1 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.72f, 0.86f, 1.00f, 1.00f));
-                    string eventLabel = ev.Source == EventSource.Partake ? "Open on Partake" : "Open website";
-                    if (ImGui.MenuItem($"{eventLabel}##{ev.Id}lw"))
-                        Util.OpenLink(ev.EventUrl);
-                }
-                if (!string.IsNullOrEmpty(ev.WebsiteUrl))
-                {
-                    using var t2 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.72f, 0.86f, 1.00f, 1.00f));
-                    if (ImGui.MenuItem($"Website##{ev.Id}lws"))
-                        Util.OpenLink(ev.WebsiteUrl);
-                }
-                if (!string.IsNullOrEmpty(ev.InstagramUrl))
-                {
-                    using var t3 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.90f, 0.50f, 0.70f, 1.00f));
-                    if (ImGui.MenuItem($"Instagram##{ev.Id}lig"))
-                        Util.OpenLink(ev.InstagramUrl);
-                }
-                if (!string.IsNullOrEmpty(ev.DiscordUrl))
-                {
-                    using var t4 = ImRaii.PushColor(ImGuiCol.Text, new Vector4(0.76f, 0.80f, 1.00f, 1.00f));
-                    if (ImGui.MenuItem($"Discord server##{ev.Id}ld"))
-                        Util.OpenLink(ev.DiscordUrl);
-                }
-                ImGui.EndPopup();
-            }
-        }
-
-        if (!string.IsNullOrEmpty(ev.LifestreamCode))
-        {
-            bool lsAvail   = Plugin.IsLifestreamAvailable();
-            string lsCode  = ev.LifestreamCode;
-            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        lsAvail ? new Vector4(0.18f, 0.36f, 0.22f, 0.65f) : new Vector4(0.28f, 0.20f, 0.20f, 0.65f));
-            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, lsAvail ? new Vector4(0.24f, 0.52f, 0.30f, 0.90f) : new Vector4(0.40f, 0.26f, 0.26f, 0.90f));
-            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  lsAvail ? new Vector4(0.30f, 0.64f, 0.38f, 1.00f) : new Vector4(0.50f, 0.32f, 0.32f, 1.00f));
-            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          lsAvail ? new Vector4(0.62f, 1.00f, 0.70f, 1.00f) : new Vector4(0.80f, 0.50f, 0.50f, 1.00f));
-            if (ImGui.SmallButton($" Teleport ##{ev.Id}"))
-                RequestTeleport(ev.Server, lsCode, config);
-            if (ImGui.IsItemHovered())
-            {
-                ImGui.SetTooltip(lsAvail
-                    ? $"Teleport: {lsCode}"
-                    : "Lifestream is not installed, click for details");
-            }
-        }
-
-        if (IsHousingLocation(ev.LifestreamCode))
-        {
-            ImGui.SameLine(0, 4);
-            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.34f, 0.12f, 0.54f, 0.65f));
-            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.46f, 0.18f, 0.72f, 0.90f));
-            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.56f, 0.22f, 0.86f, 1.00f));
-            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(0.84f, 0.64f, 1.00f, 1.00f));
-            if (ImGui.SmallButton($" Syncshell##{ev.Id}cwls"))
-                ImGui.OpenPopup($"##cwls{ev.Id}");
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Syncshell");
-
-            ImGui.SetNextWindowSize(new Vector2(300f * ImGuiHelpers.GlobalScale, 0f));
-            using (ImRaii.PushColor(ImGuiCol.PopupBg, new Vector4(0.11f, 0.11f, 0.18f, 1f)))
-            if (ImGui.BeginPopup($"##cwls{ev.Id}"))
-            {
-                DrawCwlsPopupContent(ev.LinkedSynchell, ev.Id);
-                ImGui.EndPopup();
-            }
-        }
-
-        ImGui.SameLine(0, 4);
-        if (ev.Source == EventSource.FFXIVenue)
-        {
-            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.35f, 0.12f, 0.12f, 0.65f));
-            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.55f, 0.18f, 0.18f, 0.90f));
-            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.70f, 0.22f, 0.22f, 1.00f));
-            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          new Vector4(1.00f, 0.40f, 0.40f, 1.00f));
-            if (ImGui.SmallButton($" ! ##{ev.Id}flag"))
-            {
-                _flagVenueId  = ev.Id.StartsWith("ffxivenue-") ? ev.Id[10..] : ev.Id;
-                _flagCategory = 0;
-                _flagDesc     = string.Empty;
-                _flagStatus   = string.Empty;
-                _flagBusy     = false;
-                ImGui.OpenPopup("##venueflagpopup");
-            }
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Report this venue");
-        }
-        else
-        {
-            ImGui.Dummy(new Vector2(32f * ImGuiHelpers.GlobalScale, 1f));
-        }
-    }
 
     private static void DrawCwlsPopupContent(Models.SynchellEntry? synchell, string evId)
     {
@@ -832,7 +718,7 @@ public static class EventRenderer
                 {
                     0 => "VenueEmpty",
                     1 => "IncorrectInformation",
-                    _ => "InappropriateContent",
+                    _                    => "InappropriateContent",
                 };
                 var desc = _flagDesc;
                 System.Threading.Tasks.Task.Run(async () =>
@@ -928,8 +814,4 @@ public static class EventRenderer
             ImGui.TextUnformatted("·");
         ImGui.SameLine(0, 6);
     }
-
-    private static Vector4 StatusColor(CachedEventStrings c) =>
-        c.IsLive ? ColTimeLive : c.IsStartingSoon ? ColTimeSoon :
-        c.HasEnded ? ColTimeEnded : ColTimeFut;
 }

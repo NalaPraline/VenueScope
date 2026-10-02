@@ -21,6 +21,7 @@ public class PartakeEvent
     [JsonProperty("startsAt")]     public DateTime StartsAt   { get; set; }
     [JsonProperty("endsAt")]       public DateTime EndsAt     { get; set; }
     [JsonProperty("attendeeCount")] public int AttendeeCount  { get; set; }
+    [JsonProperty("attachments")]  public string[] Attachments { get; set; } = Array.Empty<string>();
     [JsonProperty("locationData")] public PartakeLocationData? LocationData { get; set; }
 
     [JsonProperty("team")] public PartakeTeam? Team { get; set; }

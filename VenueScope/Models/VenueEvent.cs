@@ -9,6 +9,13 @@ public enum EventSource
     FFXIVenue
 }
 
+public class Opening
+{
+    public DateTime  Start  { get; set; }
+    public DateTime? End    { get; set; }
+    public bool      Closed { get; set; }
+}
+
 public class VenueEvent
 {
     public string Id { get; set; } = string.Empty;
@@ -35,6 +42,9 @@ public class VenueEvent
     public string InstagramUrl { get; set; } = string.Empty;
     public EventSource Source { get; set; }
     public int AttendeeCount { get; set; }
+    public List<string> Images { get; set; } = new();
+    public bool Hiring { get; set; }
+    public List<Opening> Openings { get; set; } = new();
     public bool IsNew { get; set; }
 
     [System.NonSerialized]

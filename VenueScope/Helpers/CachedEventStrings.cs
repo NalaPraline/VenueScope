@@ -6,6 +6,9 @@ public class CachedEventStrings
     public string EndsAtHumanized   { get; set; } = string.Empty;
     public string StartsAtLocal     { get; set; } = string.Empty;
     public string EndsAtLocal       { get; set; } = string.Empty;
+    public string TimeRange         { get; set; } = string.Empty;
+    public string DayLabel          { get; set; } = string.Empty;
+    public string StatusLabel       { get; set; } = string.Empty;
     public string[] Tags            { get; set; } = [];
     public string Location          { get; set; } = string.Empty;
     public string ServerDc          { get; set; } = string.Empty;

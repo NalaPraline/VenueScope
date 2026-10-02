@@ -87,6 +87,8 @@ public class FFXIVenueService : IDisposable
 
                 result.Add(new VenueEvent
                 {
+                    Hiring         = item["hiring"]?.Type == JTokenType.Boolean && item["hiring"]!.Value<bool>(),
+                    Openings       = ReadOpenings(item),
                     Id             = $"ffxivenue-{id}",
                     Title          = name,
                     Description    = desc,
@@ -110,6 +112,33 @@ public class FFXIVenueService : IDisposable
             _log.Warning($"[FFXIVenue] Parse error: {ex.Message}");
         }
         return result;
+    }
+
+    private static List<Opening> ReadOpenings(JObject item)
+    {
+        var list = new List<Opening>();
+        var now  = DateTimeOffset.UtcNow;
+
+        if (item["schedule"] is JArray schedules)
+            foreach (JObject sch in schedules.OfType<JObject>())
+            {
+                if (sch["resolution"] is not JObject res) continue;
+                if (!DateTimeOffset.TryParse(res["start"]?.ToString(), out var s)) continue;
+                DateTimeOffset? e = DateTimeOffset.TryParse(res["end"]?.ToString(), out var ee) ? ee : null;
+                list.Add(new Opening { Start = s.UtcDateTime, End = e?.UtcDateTime });
+            }
+
+        if (item["scheduleOverrides"] is JArray overrides)
+            foreach (JObject o in overrides.OfType<JObject>())
+            {
+                if (!DateTimeOffset.TryParse(o["start"]?.ToString(), out var s)) continue;
+                DateTimeOffset? e = DateTimeOffset.TryParse(o["end"]?.ToString(), out var ee) ? ee : null;
+                if ((e ?? s) < now) continue;
+                bool open = o["open"]?.Type == JTokenType.Boolean && o["open"]!.Value<bool>();
+                list.Add(new Opening { Start = s.UtcDateTime, End = e?.UtcDateTime, Closed = !open });
+            }
+
+        return list.OrderBy(o => o.Start).ToList();
     }
 
     private static bool ResolveNextOpening(JObject item,

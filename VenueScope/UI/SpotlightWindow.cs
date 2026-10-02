@@ -380,10 +380,7 @@ public sealed class SpotlightWindow : Window, IDisposable
     {
         var card = BeginCard(default);
         float wrapX = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X - card.PadX;
-        ImGui.PushTextWrapPos(wrapX);
-        using (ImRaii.PushColor(ImGuiCol.Text, ColBody))
-            ImGui.TextWrapped(v.Description);
-        ImGui.PopTextWrapPos();
+        RichText.Draw(v.Description, wrapX - ImGui.GetCursorPosX());
         EndCard(card);
     }
 

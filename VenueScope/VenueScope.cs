@@ -55,6 +55,7 @@ public sealed class Plugin : IDalamudPlugin
     private MainWindow      MainWindow      { get; init; }
     private ConfigWindow    ConfigWindow    { get; init; }
     private SpotlightWindow SpotlightWindow { get; init; }
+    private EventWindow     EventWindow     { get; init; }
 
     private readonly PartakeService      _partakeService;
     private readonly FFXIVenueService    _ffxivenueService;
@@ -108,6 +109,10 @@ public sealed class Plugin : IDalamudPlugin
         SpotlightWindow = new SpotlightWindow(Configuration);
         WindowSystem.AddWindow(SpotlightWindow);
 
+        EventWindow = new EventWindow(Configuration);
+        WindowSystem.AddWindow(EventWindow);
+        EventRenderer.OnOpenEvent = EventWindow.Open;
+
         MainWindow = new MainWindow(_cacheService, _partakeService, Configuration, ConfigWindow.Toggle,
                                     _spotlightService, SpotlightWindow.Open);
         WindowSystem.AddWindow(MainWindow);
@@ -145,6 +150,8 @@ public sealed class Plugin : IDalamudPlugin
         ConfigWindow.Dispose();
         MainWindow.Dispose();
         SpotlightWindow.Dispose();
+        EventWindow.Dispose();
+        EventRenderer.OnOpenEvent = null;
 
         CommandManager.RemoveHandler(CmdMain);
         CommandManager.RemoveHandler(CmdAlias);
