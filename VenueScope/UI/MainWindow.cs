@@ -49,8 +49,6 @@ public sealed class MainWindow : Window, IDisposable
 
     private enum TimeFilter { All = 0, LiveNow = 1, Today = 2, Upcoming = 3 }
 
-    private static readonly Vector4 ColPartake   = new(0.33f, 0.58f, 0.96f, 1f);
-    private static readonly Vector4 ColFFXIVenue = new(0.62f, 0.32f, 0.92f, 1f);
     private static readonly Vector4 ColAccent    = new(0.40f, 0.65f, 1.00f, 1f);
     private static readonly Vector4 ColSubtitle  = new(0.50f, 0.50f, 0.60f, 1f);
     private static readonly Vector4 ColTimeLive  = new(0.20f, 0.86f, 0.42f, 1f);
@@ -112,6 +110,7 @@ public sealed class MainWindow : Window, IDisposable
         {
             0 => EventSource.Partake,
             1 => EventSource.FFXIVenue,
+            2 => EventSource.VenueScope,
             _ => null,
         };
 
@@ -438,6 +437,7 @@ public sealed class MainWindow : Window, IDisposable
     private readonly int[] _timeCounts = new int[4];
     private int _partakeCount;
     private int _venueCount;
+    private int _ownerCount;
     private Dictionary<string, int> _tagCounts = new();
     private string _tagSearch = string.Empty;
 
@@ -465,6 +465,7 @@ public sealed class MainWindow : Window, IDisposable
         var bySource = WithoutEnded(GetBaseEvents(ignoreSource: true));
         _partakeCount = bySource.Count(e => e.Source == EventSource.Partake);
         _venueCount   = bySource.Count(e => e.Source == EventSource.FFXIVenue);
+        _ownerCount   = bySource.Count(e => e.Source == EventSource.VenueScope);
     }
 
     private List<VenueEvent> WithoutEnded(List<VenueEvent> events)
@@ -493,9 +494,10 @@ public sealed class MainWindow : Window, IDisposable
             TimeItem(TimeFilter.All,      FontAwesomeIcon.List,      null,         "All");
 
             Widgets.SectionLabel("Source");
-            SourceItem(null,                  FontAwesomeIcon.LayerGroup, null,              "All sources",  _partakeCount + _venueCount);
-            SourceItem(EventSource.Partake,   null,                       Palette.Partake,   "Partake",      _partakeCount);
-            SourceItem(EventSource.FFXIVenue, null,                       Palette.FFXIVenue, "FFXIV Venues", _venueCount);
+            SourceItem(null,                   FontAwesomeIcon.LayerGroup, null,               "All sources",  _partakeCount + _venueCount + _ownerCount);
+            SourceItem(EventSource.VenueScope, null,                       Palette.VenueScope, "VenueScope",   _ownerCount);
+            SourceItem(EventSource.Partake,    null,                       Palette.Partake,    "Partake",      _partakeCount);
+            SourceItem(EventSource.FFXIVenue,  null,                       Palette.FFXIVenue,  "FFXIV Venues", _venueCount);
 
             Widgets.SectionLabel("Yours");
             int followed = _config.FavoritePartakeTeamIds.Count + _config.FavoriteEventIds.Count;
@@ -1054,6 +1056,7 @@ public sealed class MainWindow : Window, IDisposable
         {
             EventSource.Partake   => " on Partake",
             EventSource.FFXIVenue => " on FFXIV Venues",
+            EventSource.VenueScope => " on VenueScope",
             _                     => string.Empty,
         };
         string countLabel = $"{searched.Count} event{(searched.Count != 1 ? "s" : "")}{(tfLabel.Length > 0 ? " " + tfLabel : "")}{srcLabel}";
@@ -1134,8 +1137,8 @@ public sealed class MainWindow : Window, IDisposable
 
         bool cacheUpdated = false;
         var groups = favEvents
-            .GroupBy(e => e.Source == EventSource.FFXIVenue
-                ? $"ffxiv:{e.Id}"
+            .GroupBy(e => e.Source != EventSource.Partake
+                ? $"ffxiv:{e.VenueKey}"
                 : $"partake:{e.TeamId}")
             .Select(g =>
             {
@@ -1143,9 +1146,9 @@ public sealed class MainWindow : Window, IDisposable
                 string key = g.Key;
                 var info = new FavoriteVenueInfo
                 {
-                    VenueId    = first.Source == EventSource.FFXIVenue ? first.Id : string.Empty,
+                    VenueId    = first.Source != EventSource.Partake ? first.VenueKey : string.Empty,
                     TeamId     = first.TeamId,
-                    Name       = first.Source == EventSource.FFXIVenue ? first.Title : first.TeamName,
+                    Name       = first.VenueName,
                     Server     = first.Server,
                     DataCenter = first.DataCenter,
                     IconUrl    = !string.IsNullOrEmpty(first.TeamIconUrl) ? first.TeamIconUrl : first.BannerUrl,
@@ -1168,7 +1171,7 @@ public sealed class MainWindow : Window, IDisposable
         var existingKeys = groups.Select(g => g.Key).ToHashSet();
         foreach (var (key, info) in _config.FavoriteVenueCache)
         {
-            bool isStillFav = info.Source == EventSource.FFXIVenue
+            bool isStillFav = info.Source != EventSource.Partake
                 ? _config.FavoriteEventIds.Contains(info.VenueId)
                 : _config.FavoritePartakeTeamIds.Contains(info.TeamId);
             if (!isStillFav || existingKeys.Contains(key)) continue;
@@ -1224,7 +1227,7 @@ public sealed class MainWindow : Window, IDisposable
     private bool DrawVenueFolder(FavoriteVenueInfo info, List<VenueEvent> events)
     {
         float gs        = ImGuiHelpers.GlobalScale;
-        var   srcColor  = info.Source == EventSource.Partake ? ColPartake : ColFFXIVenue;
+        var   srcColor  = Palette.Source(info.Source);
         var   colCardBg = Palette.Card;
 
         var utcNow = DateTime.UtcNow;
@@ -1283,7 +1286,7 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.SameLine(rightEdge - unfollowW);
         }
 
-        string unfollowKey = info.Source == EventSource.FFXIVenue
+        string unfollowKey = info.Source != EventSource.Partake
             ? $"ffxiv:{info.VenueId}" : $"partake:{info.TeamId}";
 
         using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.28f, 0.22f, 0.04f, 0.70f)))
@@ -1293,7 +1296,7 @@ public sealed class MainWindow : Window, IDisposable
         {
             if (ImGui.SmallButton($"\u2605 Unfollow##{unfollowKey}unfollow"))
             {
-                if (info.Source == EventSource.FFXIVenue)
+                if (info.Source != EventSource.Partake)
                 {
                     _config.FavoriteEventIds.Remove(info.VenueId);
                     _config.FavoriteVenueCache.Remove($"ffxiv:{info.VenueId}");
@@ -1373,7 +1376,7 @@ public sealed class MainWindow : Window, IDisposable
                         ImGui.TextUnformatted(cached.Location);
                 }
 
-                if (ev.Source == EventSource.Partake && !string.IsNullOrEmpty(ev.Title))
+                if (ev.Source != EventSource.FFXIVenue && !string.IsNullOrEmpty(ev.Title))
                 {
                     ImGui.SameLine(0, 6);
                     using (ImRaii.PushColor(ImGuiCol.Text, ColSubtitle with { W = 0.60f }))
@@ -1471,7 +1474,7 @@ public sealed class MainWindow : Window, IDisposable
         {
             dl.AddRectFilled(iTL, iBR, ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.13f }), 4f * gs);
             dl.AddRect(      iTL, iBR, ImGui.ColorConvertFloat4ToU32(srcColor with { W = 0.30f }), 4f * gs, 0, gs);
-            string initial = info.Source == EventSource.Partake ? "P" : "V";
+            string initial = info.Source switch { EventSource.Partake => "P", EventSource.VenueScope => "S", _ => "V" };
             var    initSz  = ImGui.CalcTextSize(initial);
             dl.AddText(
                 iTL + new Vector2((iconSz - initSz.X) * 0.5f, (iconSz - initSz.Y) * 0.5f),
@@ -1551,13 +1554,13 @@ public sealed class MainWindow : Window, IDisposable
 
         if (_favoritesOnly)
             events = events.Where(e =>
-                e.Source == EventSource.FFXIVenue
-                    ? _config.FavoriteEventIds.Contains(e.Id)
+                e.Source != EventSource.Partake
+                    ? _config.FavoriteEventIds.Contains(e.VenueKey)
                     : e.TeamId > 0 && _config.FavoritePartakeTeamIds.Contains(e.TeamId));
 
         events = events.Where(e =>
-            e.Source == EventSource.FFXIVenue
-                ? !_config.HiddenVenueIds.Contains(e.Id)
+            e.Source != EventSource.Partake
+                ? !_config.HiddenVenueIds.Contains(e.VenueKey)
                 : !(e.TeamId > 0 && _config.HiddenPartakeTeamIds.Contains(e.TeamId)));
 
         if (_cache.LastRefresh != _lastSeenRefresh)

@@ -73,7 +73,7 @@ public static class EventRenderer
     public static void DrawEventCard(VenueEvent ev, CachedEventStrings cached, Configuration config)
     {
         float   gs       = ImGuiHelpers.GlobalScale;
-        Vector4 srcColor = ev.Source == EventSource.Partake ? Palette.Partake : Palette.FFXIVenue;
+        Vector4 srcColor = Palette.Source(ev.Source);
 
         float cardW  = ImGui.GetContentRegionAvail().X;
         var   cardTL = ImGui.GetCursorScreenPos();
@@ -196,7 +196,7 @@ public static class EventRenderer
     private static bool IsFollowed(VenueEvent ev, Configuration config) =>
         ev.Source == EventSource.Partake
             ? ev.TeamId > 0 && config.FavoritePartakeTeamIds.Contains(ev.TeamId)
-            : config.FavoriteEventIds.Contains(ev.Id);
+            : config.FavoriteEventIds.Contains(ev.VenueKey);
 
     private static void DrawTitleLine(VenueEvent ev, Configuration config, float width)
     {
@@ -248,7 +248,7 @@ public static class EventRenderer
     }
 
     private static string FollowLabel(VenueEvent ev, bool isFav) =>
-        ev.Source == EventSource.Partake && !string.IsNullOrEmpty(ev.TeamName)
+        ev.Source != EventSource.FFXIVenue && !string.IsNullOrEmpty(ev.TeamName)
             ? (isFav ? $"Unfollow {ev.TeamName}" : $"Follow {ev.TeamName} (all their events)")
             : (isFav ? "Unfollow this venue" : "Follow this venue");
 
@@ -259,7 +259,7 @@ public static class EventRenderer
         ImGui.PushClipRect(top, new Vector2(left + width, top.Y + ImGui.GetTextLineHeight() + 4f * gs), true);
 
         using (ImRaii.PushColor(ImGuiCol.Text, srcColor))
-            ImGui.TextUnformatted(ev.Source == EventSource.Partake ? "Partake" : "FFXIV Venues");
+            ImGui.TextUnformatted(ev.Source == EventSource.VenueScope && ev.TeamName.Length > 0 ? ev.TeamName : Palette.SourceName(ev.Source));
 
         if (!string.IsNullOrEmpty(cached.ServerDc))
         {
@@ -497,25 +497,25 @@ public static class EventRenderer
                 };
             }
         }
-        else if (ev.Source == EventSource.FFXIVenue)
+        else if (ev.Source != EventSource.Partake)
         {
-            string key = $"ffxiv:{ev.Id}";
+            string key = $"ffxiv:{ev.VenueKey}";
             if (isFav)
             {
-                config.FavoriteEventIds.Remove(ev.Id);
+                config.FavoriteEventIds.Remove(ev.VenueKey);
                 config.FavoriteVenueCache.Remove(key);
             }
             else
             {
-                config.FavoriteEventIds.Add(ev.Id);
+                config.FavoriteEventIds.Add(ev.VenueKey);
                 config.FavoriteVenueCache[key] = new FavoriteVenueInfo
                 {
-                    VenueId    = ev.Id,
-                    Name       = ev.Title,
+                    VenueId    = ev.VenueKey,
+                    Name       = ev.VenueName,
                     Server     = ev.Server,
                     DataCenter = ev.DataCenter,
-                    IconUrl    = !string.IsNullOrEmpty(ev.BannerUrl) ? ev.BannerUrl : ev.TeamIconUrl,
-                    Source     = EventSource.FFXIVenue,
+                    IconUrl    = !string.IsNullOrEmpty(ev.TeamIconUrl) ? ev.TeamIconUrl : ev.BannerUrl,
+                    Source     = ev.Source,
                 };
             }
         }
@@ -540,26 +540,24 @@ public static class EventRenderer
                 Source     = EventSource.Partake,
             };
         }
-        else if (ev.Source == EventSource.FFXIVenue)
+        else if (ev.Source != EventSource.Partake)
         {
-            string key = $"ffxiv:{ev.Id}";
-            config.FavoriteEventIds.Remove(ev.Id);
+            string key = $"ffxiv:{ev.VenueKey}";
+            config.FavoriteEventIds.Remove(ev.VenueKey);
             config.FavoriteVenueCache.Remove(key);
-            config.HiddenVenueIds.Add(ev.Id);
+            config.HiddenVenueIds.Add(ev.VenueKey);
             config.HiddenVenueCache[key] = new FavoriteVenueInfo
             {
-                VenueId    = ev.Id,
-                Name       = ev.Title,
+                VenueId    = ev.VenueKey,
+                Name       = ev.VenueName,
                 Server     = ev.Server,
                 DataCenter = ev.DataCenter,
-                IconUrl    = !string.IsNullOrEmpty(ev.BannerUrl) ? ev.BannerUrl : ev.TeamIconUrl,
-                Source     = EventSource.FFXIVenue,
+                IconUrl    = !string.IsNullOrEmpty(ev.TeamIconUrl) ? ev.TeamIconUrl : ev.BannerUrl,
+                Source     = ev.Source,
             };
         }
 
-        string displayName = ev.Source == EventSource.Partake
-            ? (string.IsNullOrEmpty(ev.TeamName) ? ev.Title : ev.TeamName)
-            : ev.Title;
+        string displayName = string.IsNullOrEmpty(ev.VenueName) ? ev.Title : ev.VenueName;
         config.Save();
         OnHideVenue?.Invoke(displayName);
     }

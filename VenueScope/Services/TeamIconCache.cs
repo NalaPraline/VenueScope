@@ -16,8 +16,6 @@ using SixLabors.ImageSharp.Processing;
 
 namespace VenueScope.Services;
 
-// Downloads pictures once, keeps them on disk, and plays GIF, APNG and
-// animated WebP files by switching frames over time.
 public sealed class TeamIconCache : IDisposable
 {
     private const int MaxSide        = 2048;
@@ -39,6 +37,7 @@ public sealed class TeamIconCache : IDisposable
         public IDalamudTextureWrap[] Frames = [];
         public int[]                 Ends   = [];
         public int                   Length;
+        public DateTime              FailedAt;
     }
 
     private readonly ConcurrentDictionary<string, CacheEntry> _entries = new();
@@ -55,6 +54,10 @@ public sealed class TeamIconCache : IDisposable
     public IDalamudTextureWrap? GetOrQueue(string? url)
     {
         if (string.IsNullOrEmpty(url) || _disposed != 0) return null;
+
+        if (_entries.TryGetValue(url, out var old) && old.State == EntryState.Failed
+            && DateTime.UtcNow - old.FailedAt > TimeSpan.FromMinutes(3))
+            _entries.TryRemove(url, out _);
 
         var entry = _entries.GetOrAdd(url, key =>
         {
@@ -112,7 +115,8 @@ public sealed class TeamIconCache : IDisposable
         catch (Exception ex)
         {
             _log.Warning($"[TeamIconCache] Failed to load {url}: {ex.Message}");
-            entry.State = EntryState.Failed;
+            entry.FailedAt = DateTime.UtcNow;
+            entry.State    = EntryState.Failed;
         }
     }
 
@@ -147,7 +151,6 @@ public sealed class TeamIconCache : IDisposable
         entry.Length = Math.Max(1, time);
     }
 
-    // Browsers treat very short delays as 100 ms, so do the same.
     private static int FrameDelay(ImageFrame<Rgba32> frame)
     {
         int ms = 0;

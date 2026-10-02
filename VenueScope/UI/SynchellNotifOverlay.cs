@@ -1,141 +1,221 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Utility;
-using Dalamud.Interface.Utility.Raii;
-using Dalamud.Utility;
+using VenueScope.Helpers;
 using VenueScope.Models;
 
 namespace VenueScope.UI;
 
 public static class SynchellNotifOverlay
 {
-    private static SynchellEntry? _current;
-    private static bool           _showDetail;
-    private static DateTime       _dismissAt;
+    private const float ShownFor = 20f;
 
-    private static readonly Vector4 ColPurple = new(0.84f, 0.64f, 1.00f, 1f);
-    private static readonly Vector4 ColMuted  = new(0.50f, 0.50f, 0.62f, 1f);
-    private static readonly Vector4 ColTitle  = new(0.94f, 0.94f, 1.00f, 1f);
+    public static Configuration? Config;
+
+    private static SynchellEntry? _current;
+    private static float          _left;
+    private static bool           _placed;
+    private static Vector2        _lastPos;
+    private static readonly Dictionary<string, DateTime> _copied = new();
 
     public static void Show(SynchellEntry entry)
     {
-        _current     = entry;
-        _showDetail  = false;
-        _dismissAt   = DateTime.UtcNow.AddSeconds(15);
+        _current = entry;
+        _left    = ShownFor;
+        _placed  = false;
+        _copied.Clear();
+    }
+
+    public static void ShowPreview() => Show(new SynchellEntry
+    {
+        VenueName = "Moonlit Lounge",
+        Channels  =
+        [
+            new SynchellChannel { Name = "Lightless", Id = "moonlit", Password = "example" },
+            new SynchellChannel { Name = "PlayerSync", Id = "moonlit", Password = "example" },
+        ],
+    });
+
+    public static void ResetPosition()
+    {
+        if (Config == null) return;
+        Config.VenueCardX = -1f;
+        Config.VenueCardY = -1f;
+        Config.Save();
+        _placed = false;
     }
 
     public static void Draw()
     {
         if (_current == null) return;
-        if (DateTime.UtcNow >= _dismissAt) { _current = null; return; }
 
         float gs    = ImGuiHelpers.GlobalScale;
-        float width = (_showDetail ? 520f : 420f) * gs;
+        float width = 290f * gs;
+        var   vp    = ImGui.GetMainViewport();
 
-        var viewport = ImGui.GetMainViewport();
-        ImGui.SetNextWindowPos(
-            new Vector2(viewport.Pos.X + (viewport.Size.X - width) * 0.5f,
-                        viewport.Pos.Y + 20f * gs),
-            ImGuiCond.Always);
+        if (!_placed)
+        {
+            ImGui.SetNextWindowPos(StartPosition(vp, width), ImGuiCond.Always);
+            _placed = true;
+        }
         ImGui.SetNextWindowSize(new Vector2(width, 0f), ImGuiCond.Always);
-        ImGui.SetNextWindowBgAlpha(0.94f);
 
-        var flags = ImGuiWindowFlags.NoMove          | ImGuiWindowFlags.NoResize    |
-                    ImGuiWindowFlags.NoTitleBar       | ImGuiWindowFlags.NoScrollbar |
+        var flags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoScrollbar |
                     ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoFocusOnAppearing |
-                    ImGuiWindowFlags.NoNav;
+                    ImGuiWindowFlags.NoNav | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoDocking;
 
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, Palette.Window with { W = 0.97f });
+        ImGui.PushStyleColor(ImGuiCol.Border, Palette.Line);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 12f * gs);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding,   8f);
-        using (ImRaii.PushColor(ImGuiCol.WindowBg, new Vector4(0.09f, 0.07f, 0.16f, 1f)))
-        using (ImRaii.PushColor(ImGuiCol.Border,   new Vector4(0.50f, 0.22f, 0.78f, 0.90f)))
-        {
-            bool visible = ImGui.Begin("##synchellnotif", flags);
-            ImGui.PopStyleVar(2);
-            if (!visible) { ImGui.End(); return; }
-        }
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(12f, 10f) * gs);
+        bool open = ImGui.Begin("##venuescope-venuecard", flags);
+        ImGui.PopStyleVar(3);
+        ImGui.PopStyleColor(2);
 
-        using (ImRaii.PushColor(ImGuiCol.Text, ColPurple))
-            ImGui.TextUnformatted("Syncshell available");
-
-        float closeX = ImGui.GetContentRegionAvail().X - 20f * gs;
-        ImGui.SameLine(closeX);
-        using (ImRaii.PushColor(ImGuiCol.Text,          ColMuted))
-        using (ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0f, 0f, 0f, 0f)))
-        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.20f, 0.20f, 0.30f, 0.60f)))
-        {
-            if (ImGui.SmallButton("X##snclose")) { _current = null; ImGui.End(); return; }
-        }
-
-        ImGui.Separator();
-        ImGui.Spacing();
-
-        using (ImRaii.PushColor(ImGuiCol.Text, ColTitle))
-            ImGui.TextWrapped(_current!.VenueName);
-
-        using (ImRaii.PushColor(ImGuiCol.Text, ColMuted))
-            ImGui.TextUnformatted($"{_current.Channels.Count} syncshell(s) registered");
-
-        ImGui.Spacing();
-
-        if (!_showDetail)
-        {
-            using var c1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.34f, 0.12f, 0.54f, 0.75f));
-            using var c2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.46f, 0.18f, 0.72f, 1.00f));
-            using var c3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.56f, 0.22f, 0.86f, 1.00f));
-            using var c4 = ImRaii.PushColor(ImGuiCol.Text,          ColPurple);
-            if (ImGui.Button("  View syncshells  ##snview"))
-            {
-                _showDetail = true;
-                _dismissAt  = DateTime.UtcNow.AddSeconds(60);
-            }
-        }
-        else
-        {
-            int idx = 0;
-            foreach (var ch in _current.Channels)
-            {
-                if (idx > 0) { ImGui.Spacing(); ImGui.Separator(); }
-                ImGui.Spacing();
-
-                using (ImRaii.PushColor(ImGuiCol.Text, ColPurple))
-                    ImGui.TextUnformatted(ch.Name);
-                ImGui.Spacing();
-
-                using var b1 = ImRaii.PushColor(ImGuiCol.Button,        new Vector4(0.18f, 0.18f, 0.28f, 0.70f));
-                using var b2 = ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.28f, 0.28f, 0.42f, 0.90f));
-                using var b3 = ImRaii.PushColor(ImGuiCol.ButtonActive,  new Vector4(0.36f, 0.36f, 0.54f, 1.00f));
-
-                if (!string.IsNullOrEmpty(ch.Id))
-                {
-                    using (ImRaii.PushColor(ImGuiCol.Text, ColMuted))
-                        ImGui.TextUnformatted("ID");
-                    ImGui.SameLine(0, 6);
-                    using (ImRaii.PushColor(ImGuiCol.Text, ColTitle))
-                        ImGui.TextUnformatted(ch.Id);
-                    ImGui.SameLine(0, 8);
-                    if (ImGui.SmallButton($" Copy ##sncid{idx}"))
-                        ImGui.SetClipboardText(ch.Id);
-                }
-
-                if (!string.IsNullOrEmpty(ch.Password))
-                {
-                    using (ImRaii.PushColor(ImGuiCol.Text, ColMuted))
-                        ImGui.TextUnformatted("Pass");
-                    ImGui.SameLine(0, 6);
-                    using (ImRaii.PushColor(ImGuiCol.Text, ColTitle))
-                        ImGui.TextUnformatted(ch.Password);
-                    ImGui.SameLine(0, 8);
-                    if (ImGui.SmallButton($" Copy ##sncpw{idx}"))
-                        ImGui.SetClipboardText(ch.Password);
-                }
-
-                ImGui.Spacing();
-                idx++;
-            }
-        }
-
+        if (open) DrawBody(width);
+        KeepPosition(vp);
         ImGui.End();
+
+        if (!ImGui.IsPopupOpen("", ImGuiPopupFlags.AnyPopupId) && !_hovered)
+            _left -= ImGui.GetIO().DeltaTime;
+        if (_left <= 0f) _current = null;
+    }
+
+    private static bool _hovered;
+
+    private static void DrawBody(float width)
+    {
+        float gs = ImGuiHelpers.GlobalScale;
+        var   dl = ImGui.GetWindowDrawList();
+        var   entry = _current!;
+        _hovered = ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByActiveItem);
+
+        float mark = 34f * gs;
+        var   p0   = ImGui.GetCursorScreenPos();
+        dl.AddRectFilled(p0, p0 + new Vector2(mark), Palette.U(Palette.Accent with { W = 0.22f }), 8f * gs);
+        var initial = entry.VenueName.Length > 0 ? entry.VenueName[..1].ToUpperInvariant() : "?";
+        var isz = ImGui.CalcTextSize(initial);
+        dl.AddText(p0 + (new Vector2(mark) - isz) / 2f, Palette.U(Palette.AccentText), initial);
+
+        float textX = p0.X + mark + 10f * gs;
+        float lineH = ImGui.GetTextLineHeight();
+        dl.AddText(new Vector2(textX, p0.Y + mark / 2f - lineH), Palette.U(Palette.Muted), "You are at");
+        string name = Widgets.Ellipsize(entry.VenueName, width - mark - 70f * gs);
+        dl.AddText(new Vector2(textX, p0.Y + mark / 2f), Palette.U(Palette.Text), name);
+
+        float close = ImGui.GetFrameHeight();
+        ImGui.SetCursorScreenPos(new Vector2(p0.X + width - 24f * gs - close, p0.Y + (mark - close) / 2f));
+        if (Widgets.GhostIcon("##vcclose", FontAwesomeIcon.Times, "Close", close))
+            _left = 0f;
+        ImGui.SetCursorScreenPos(new Vector2(p0.X, p0.Y + mark + 8f * gs));
+
+        if (entry.Channels.Count > 0) DrawChannels(entry, width - 24f * gs);
+
+        ImGui.Dummy(new Vector2(0, 6f * gs));
+        var wp = ImGui.GetWindowPos();
+        var ws = ImGui.GetWindowSize();
+        float frac = Math.Clamp(_left / ShownFor, 0f, 1f);
+        var bar0 = new Vector2(wp.X + 12f * gs, wp.Y + ws.Y - 5f * gs);
+        float barW = ws.X - 24f * gs;
+        ImGui.PushClipRect(wp, wp + ws, false);
+        dl.AddRectFilled(bar0, bar0 + new Vector2(barW, 2f * gs), Palette.U(Palette.Line), 1f * gs);
+        dl.AddRectFilled(bar0, bar0 + new Vector2(barW * frac, 2f * gs), Palette.U(Palette.Accent with { W = _hovered ? 0.5f : 0.9f }), 1f * gs);
+        ImGui.PopClipRect();
+    }
+
+    private static void DrawChannels(SynchellEntry entry, float w)
+    {
+        float gs  = ImGuiHelpers.GlobalScale;
+        var   dl  = ImGui.GetWindowDrawList();
+        var   pad = new Vector2(10f, 8f) * gs;
+        var   p0  = ImGui.GetCursorScreenPos();
+        float inner = w - pad.X * 2;
+
+        dl.ChannelsSplit(2);
+        dl.ChannelsSetCurrent(1);
+        ImGui.SetCursorScreenPos(p0 + pad);
+        ImGui.BeginGroup();
+
+        int n = 0;
+        foreach (var ch in entry.Channels)
+        {
+            if (n > 0)
+            {
+                ImGui.Dummy(new Vector2(0, 4f * gs));
+                var lp = ImGui.GetCursorScreenPos();
+                dl.AddLine(lp, lp + new Vector2(inner, 0), Palette.U(Palette.Line));
+                ImGui.Dummy(new Vector2(0, 4f * gs));
+            }
+
+            var col = EventRenderer.GetTagColor(ch.Name);
+            var pp  = ImGui.GetCursorScreenPos();
+            var tsz = ImGui.CalcTextSize(ch.Name);
+            var psz = tsz + new Vector2(14f, 4f) * gs;
+            dl.AddRectFilled(pp, pp + psz, Palette.U(col with { W = 0.18f }), psz.Y / 2f);
+            dl.AddText(pp + new Vector2(7f, 2f) * gs, Palette.U(Vector4.Lerp(col, Palette.Text, 0.3f)), ch.Name);
+            ImGui.Dummy(psz);
+
+            Row("ID", ch.Id, $"{n}id", inner);
+            Row("Pass", ch.Password, $"{n}pw", inner);
+            n++;
+        }
+
+        ImGui.EndGroup();
+        float bottom = ImGui.GetItemRectMax().Y + pad.Y;
+        dl.ChannelsSetCurrent(0);
+        dl.AddRectFilled(p0, new Vector2(p0.X + w, bottom), Palette.U(Palette.Card), 9f * gs);
+        dl.ChannelsMerge();
+        ImGui.SetCursorScreenPos(new Vector2(p0.X, bottom));
+        ImGui.Dummy(new Vector2(w, 0));
+    }
+
+    private static void Row(string label, string value, string id, float w)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        float gs  = ImGuiHelpers.GlobalScale;
+        var   dl  = ImGui.GetWindowDrawList();
+        float btn = ImGui.GetFrameHeight();
+        var   p   = ImGui.GetCursorScreenPos();
+        float ty  = p.Y + (btn - ImGui.GetTextLineHeight()) / 2f;
+
+        dl.AddText(new Vector2(p.X, ty), Palette.U(Palette.Muted), label);
+        dl.AddText(new Vector2(p.X + 40f * gs, ty), Palette.U(Palette.Text), Widgets.Ellipsize(value, w - 40f * gs - btn - 6f * gs));
+
+        bool done = _copied.TryGetValue(id, out var at) && (DateTime.UtcNow - at).TotalSeconds < 1.5;
+        ImGui.SetCursorScreenPos(new Vector2(p.X + w - btn, p.Y));
+        if (Widgets.IconButton($"##vccopy{id}", done ? FontAwesomeIcon.Check : FontAwesomeIcon.Copy,
+                done ? "Copied" : $"Copy {label.ToLowerInvariant()}", done ? Palette.Live : Palette.Accent, size: btn))
+        {
+            ImGui.SetClipboardText(value);
+            _copied[id] = DateTime.UtcNow;
+        }
+    }
+
+    private static Vector2 StartPosition(ImGuiViewportPtr vp, float width)
+    {
+        if (Config is { VenueCardX: >= 0f, VenueCardY: >= 0f } c)
+        {
+            var pos = vp.Pos + new Vector2(c.VenueCardX * vp.Size.X, c.VenueCardY * vp.Size.Y);
+            pos.X = Math.Clamp(pos.X, vp.Pos.X, vp.Pos.X + vp.Size.X - width);
+            pos.Y = Math.Clamp(pos.Y, vp.Pos.Y, vp.Pos.Y + vp.Size.Y - 120f * ImGuiHelpers.GlobalScale);
+            _lastPos = pos;
+            return pos;
+        }
+        _lastPos = vp.Pos + new Vector2(vp.Size.X - width - 260f * ImGuiHelpers.GlobalScale, vp.Size.Y * 0.30f);
+        return _lastPos;
+    }
+
+    private static void KeepPosition(ImGuiViewportPtr vp)
+    {
+        var pos = ImGui.GetWindowPos();
+        if (Config == null || ImGui.IsMouseDown(ImGuiMouseButton.Left) || Vector2.DistanceSquared(pos, _lastPos) < 1f) return;
+        _lastPos = pos;
+        Config.VenueCardX = (pos.X - vp.Pos.X) / vp.Size.X;
+        Config.VenueCardY = (pos.Y - vp.Pos.Y) / vp.Size.Y;
+        Config.Save();
     }
 }

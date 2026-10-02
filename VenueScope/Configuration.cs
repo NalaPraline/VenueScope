@@ -31,6 +31,7 @@ public class Configuration : IPluginConfiguration
 
     public bool ShowPartakeEvents   { get; set; } = true;
     public bool ShowFFXIVenueEvents { get; set; } = true;
+    public bool ShowVenueScopeEvents { get; set; } = true;
     public bool ShowSpotlight       { get; set; } = true;
 
     public int RefreshIntervalMinutes { get; set; } = 5;
@@ -39,6 +40,8 @@ public class Configuration : IPluginConfiguration
 
     public bool EnableNotifications      { get; set; } = true;
     public bool EnableSyncshellPopup     { get; set; } = true;
+    public float VenueCardX              { get; set; } = -1f;
+    public float VenueCardY              { get; set; } = -1f;
     public List<string> NotifyForDataCenters { get; set; } = new();
 
     public bool HideEndedEvents     { get; set; } = false;

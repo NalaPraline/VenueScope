@@ -25,6 +25,21 @@ public static class Palette
 
     public static readonly Vector4 Partake       = new(0.38f, 0.65f, 0.98f, 1f);
     public static readonly Vector4 FFXIVenue     = new(0.75f, 0.52f, 0.99f, 1f);
+    public static readonly Vector4 VenueScope    = new(0.98f, 0.60f, 0.72f, 1f);
+
+    public static Vector4 Source(Models.EventSource source) => source switch
+    {
+        Models.EventSource.Partake    => Partake,
+        Models.EventSource.VenueScope => VenueScope,
+        _                             => FFXIVenue,
+    };
+
+    public static string SourceName(Models.EventSource source) => source switch
+    {
+        Models.EventSource.Partake    => "Partake",
+        Models.EventSource.VenueScope => "VenueScope",
+        _                             => "FFXIV Venues",
+    };
 
     public static uint U(Vector4 color) => Dalamud.Bindings.ImGui.ImGui.ColorConvertFloat4ToU32(color);
 }

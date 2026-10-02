@@ -161,6 +161,13 @@ public sealed class ConfigWindow : Window, IDisposable
             _config.Save();
             Task.Run(_cache.RefreshNowAsync);
         }
+        var showV = _config.ShowVenueScopeEvents;
+        if (Widgets.Toggle("##srcv", "VenueScope", ref showV, "Events posted by venue owners on my.venuescope.club"))
+        {
+            _config.ShowVenueScopeEvents = showV;
+            _config.Save();
+            Task.Run(_cache.RefreshNowAsync);
+        }
         var showSpot = _config.ShowSpotlight;
         if (Widgets.Toggle("##spot", "Spotlight banner", ref showSpot, "Featured venues at the top of the list"))
         {
@@ -179,11 +186,12 @@ public sealed class ConfigWindow : Window, IDisposable
 
         var pCount = _cache.CachedEvents.Count(e => e.Source == EventSource.Partake);
         var fCount = _cache.CachedEvents.Count(e => e.Source == EventSource.FFXIVenue);
+        var vCount = _cache.CachedEvents.Count(e => e.Source == EventSource.VenueScope);
         using (ImRaii.PushColor(ImGuiCol.Text, Palette.Muted))
         {
             ImGui.TextUnformatted(_cache.IsRefreshing
                 ? "Loading..."
-                : $"{pCount} Partake events and {fCount} venue openings loaded.");
+                : $"{pCount} Partake events, {fCount} venue openings and {vCount} VenueScope events loaded.");
         }
 
         ImGui.Dummy(new Vector2(0f, 2f * ImGuiHelpers.GlobalScale));
@@ -258,6 +266,18 @@ public sealed class ConfigWindow : Window, IDisposable
             _config.EnableSyncshellPopup = syncPopup;
             _config.Save();
         }
+        if (_config.EnableSyncshellPopup)
+        {
+            ImGui.Dummy(new Vector2(0f, 2f * gs));
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 42f * gs);
+            if (Widgets.PillButton("##cardpreview", FontAwesomeIcon.Eye, "Preview", Palette.Accent,
+                    "Shows the card with sample data so you can drag it where you like"))
+                SynchellNotifOverlay.ShowPreview();
+            ImGui.SameLine(0, 6f * gs);
+            if (Widgets.PillButton("##cardreset", FontAwesomeIcon.UndoAlt, "Reset position", Palette.TextSoft,
+                    "Puts the card back on the right side of the screen"))
+                SynchellNotifOverlay.ResetPosition();
+        }
 
         if (!_config.EnableNotifications) return;
 
@@ -312,7 +332,7 @@ public sealed class ConfigWindow : Window, IDisposable
 
         Widgets.Group("Source shown first");
         int source = _config.DefaultSourceFilter + 1;
-        if (Widgets.Segment("##defsrc", ["Both", "Partake", "FFXIV Venues"], ref source, FieldWidth))
+        if (Widgets.Segment("##defsrc", ["All", "Partake", "FFXIV Venues", "VenueScope"], ref source, FieldWidth))
         {
             _config.DefaultSourceFilter = source - 1;
             _config.Save();
@@ -390,7 +410,7 @@ public sealed class ConfigWindow : Window, IDisposable
 
         foreach (var (key, info) in _config.HiddenVenueCache.ToList())
         {
-            var   srcColor = info.Source == EventSource.Partake ? Palette.Partake : Palette.FFXIVenue;
+            var   srcColor = Palette.Source(info.Source);
             float rowH     = ImGui.GetFrameHeight() + 10f * gs;
             float width    = ImGui.GetContentRegionAvail().X - 12f * gs;
             var   p0       = ImGui.GetCursorScreenPos();

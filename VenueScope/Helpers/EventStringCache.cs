@@ -56,7 +56,7 @@ public class EventStringCache
                 Tags              = ev.Tags.ToArray(),
                 Location          = location,
                 ServerDc          = serverDc,
-                SourceBadge       = ev.Source == EventSource.Partake ? "PARTAKE" : "FFXIVENUE",
+                SourceBadge       = Palette.SourceName(ev.Source).ToUpperInvariant(),
                 IsLive            = isLive,
                 IsStartingSoon    = isSoon,
                 HasEnded          = hasEnded,

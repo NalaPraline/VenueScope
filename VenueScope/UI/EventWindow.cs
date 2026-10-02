@@ -15,14 +15,17 @@ namespace VenueScope.UI;
 public sealed class EventWindow : Window, IDisposable
 {
     private readonly Configuration _config;
+    private readonly Services.EventCacheService _cache;
+    private DateTime _seenRefresh;
     private VenueEvent? _event;
     private int         _tab;
     private string?     _zoom;
 
-    public EventWindow(Configuration config)
+    public EventWindow(Configuration config, Services.EventCacheService cache)
         : base("Event##venuescope-event", ImGuiWindowFlags.None)
     {
         _config = config;
+        _cache  = cache;
         SizeCondition   = ImGuiCond.FirstUseEver;
         Size            = new Vector2(560, 800);
         SizeConstraints = new WindowSizeConstraints
@@ -34,8 +37,9 @@ public sealed class EventWindow : Window, IDisposable
 
     public void Open(VenueEvent ev)
     {
-        _event     = ev;
-        _tab       = 0;
+        _event       = ev;
+        _seenRefresh = _cache.LastRefresh;
+        _tab         = 0;
         _zoom      = null;
         WindowName = $"{(ev.Title.Length > 0 ? ev.Title : "Event")}##venuescope-event";
         IsOpen     = true;
@@ -65,6 +69,12 @@ public sealed class EventWindow : Window, IDisposable
 
     public override void Draw()
     {
+        if (_event != null && _cache.LastRefresh != _seenRefresh)
+        {
+            _seenRefresh = _cache.LastRefresh;
+            var id = _event.Id;
+            _event = _cache.CachedEvents.FirstOrDefault(e => e.Id == id) ?? _event;
+        }
         var ev = _event;
         if (ev == null) return;
         var src = SourceColor(ev);
@@ -93,6 +103,29 @@ public sealed class EventWindow : Window, IDisposable
                 }
                 if (!any) Muted("This venue has no description yet.");
             });
+            return;
+        }
+
+        if (ev.Source == EventSource.VenueScope)
+        {
+            if (ev.Lineup.Count > 0)
+            {
+                Card(null, w => { Title("Lineup"); DrawLineup(ev, w); });
+                Space(10);
+            }
+            if (ev.Activities.Count > 0)
+            {
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 4f * ImGuiHelpers.GlobalScale);
+                Title("Tonight", $"{ev.Activities.Count} on the program");
+                foreach (var a in ev.Activities.OrderBy(a => a.Start ?? DateTime.MaxValue))
+                {
+                    Card(ActivityStyle.Color(a.Kind), w => DrawActivity(a, w));
+                    Space(6);
+                }
+                Space(4);
+            }
+            if (RichText.HasContent(ev.Description))
+                Card(null, w => RichText.Draw(ev.Description, w));
             return;
         }
 
@@ -145,7 +178,7 @@ public sealed class EventWindow : Window, IDisposable
         if (tex == null) dl.AddRectFilled(p0, p0 + size, Palette.U(Palette.Card), 10f * gs);
         else             DrawCover(dl, tex, p0, size, 10f * gs);
 
-        var badge = ev.Source == EventSource.Partake ? "Partake" : "FFXIV Venues";
+        var badge = Palette.SourceName(ev.Source);
         Badge(dl, p0 + new Vector2(10f, 10f) * gs, badge, src);
 
         var (status, col) = Status(ev);
@@ -185,6 +218,7 @@ public sealed class EventWindow : Window, IDisposable
         var meta = new[] { ev.TeamName.Length > 0 ? $"by {ev.TeamName}" : "", ev.AttendeeCount > 0 ? $"{ev.AttendeeCount} going" : "" }
             .Where(s => s.Length > 0).ToArray();
         if (meta.Length > 0) Muted(string.Join("  ·  ", meta));
+        if (ev.Summary.Length > 0) Soft(ev.Summary);
         ImGui.EndGroup();
         float bottom = Math.Max(ImGui.GetItemRectMax().Y, icon != null ? top.Y + iconSz : 0f);
         ImGui.SetCursorScreenPos(new Vector2(top.X, bottom));
@@ -244,7 +278,7 @@ public sealed class EventWindow : Window, IDisposable
             Pill("##evig", FontAwesomeIcon.Camera, "Instagram", Palette.TextSoft, ev.InstagramUrl, () => Util.OpenLink(ev.InstagramUrl));
         if (!string.IsNullOrEmpty(ev.EventUrl))
         {
-            var label = ev.Source == EventSource.Partake ? "Partake" : "FFXIV Venues";
+            var label = Palette.SourceName(ev.Source);
             Pill("##evsrc", FontAwesomeIcon.ExternalLinkAlt, label, SourceColor(ev), ev.EventUrl, () => Util.OpenLink(ev.EventUrl));
         }
     }
@@ -314,6 +348,169 @@ public sealed class EventWindow : Window, IDisposable
         }
     }
 
+    private static void DrawLineup(VenueEvent ev, float w)
+    {
+        float gs   = ImGuiHelpers.GlobalScale;
+        var   dl   = ImGui.GetWindowDrawList();
+        float logo = 30f * gs;
+        float timeW = ImGui.CalcTextSize("00:00 to 00:00").X + 14f * gs;
+        var   now  = DateTime.Now;
+
+        foreach (var slot in ev.Lineup)
+        {
+            var  p      = ImGui.GetCursorScreenPos();
+            var  s      = slot.Start is { } a ? Local(a) : (DateTime?)null;
+            var  e      = slot.End is { } b ? Local(b) : (DateTime?)null;
+            bool onAir  = s <= now && e > now;
+            float rowH  = logo + 8f * gs;
+            float ty    = p.Y + (rowH - ImGui.GetTextLineHeight()) / 2f;
+
+            if (onAir) dl.AddRectFilled(p, p + new Vector2(w, rowH), Palette.U(Palette.Live with { W = 0.08f }), 8f * gs);
+            string when = s == null ? "" : e != null ? $"{s:HH:mm} to {e:HH:mm}" : $"{s:HH:mm}";
+            dl.AddText(new Vector2(p.X + 8f * gs, ty), Palette.U(onAir ? Palette.Live : Palette.Muted), when);
+
+            float x = p.X + 8f * gs + timeW;
+            var tex = !string.IsNullOrEmpty(slot.LogoUrl) ? EventRenderer.IconCache?.GetOrQueue(slot.LogoUrl) : null;
+            var lp  = new Vector2(x, p.Y + 4f * gs);
+            if (tex != null)
+            {
+                DrawCover(dl, tex, lp, new Vector2(logo), 7f * gs);
+            }
+            else
+            {
+                var tint = EventRenderer.GetTagColor(slot.Name);
+                dl.AddRectFilled(lp, lp + new Vector2(logo), Palette.U(tint with { W = 0.20f }), 7f * gs);
+                var letter = DjInitial(slot.Name);
+                var lsz = ImGui.CalcTextSize(letter);
+                dl.AddText(lp + (new Vector2(logo) - lsz) / 2f, Palette.U(Vector4.Lerp(tint, Palette.Text, 0.3f)), letter);
+            }
+            x += logo + 10f * gs;
+
+            dl.AddText(new Vector2(x, ty), Palette.U(Palette.Text), slot.Name.Length > 0 ? slot.Name : "A DJ");
+            if (onAir)
+            {
+                var nsz = ImGui.CalcTextSize(slot.Name);
+                dl.AddText(new Vector2(x + nsz.X + 8f * gs, ty), Palette.U(Palette.Live), "on air");
+            }
+
+            ImGui.Dummy(new Vector2(w - (slot.Link.Length > 0 ? 40f * gs : 0), rowH));
+            if (slot.Link.Length > 0)
+            {
+                ImGui.SetCursorScreenPos(new Vector2(p.X + w - 34f * gs, p.Y + (rowH - ImGui.GetFrameHeight()) / 2f));
+                if (Widgets.IconButton($"##lu{slot.Name}{when}", FontAwesomeIcon.ExternalLinkAlt, slot.Link, size: ImGui.GetFrameHeight()))
+                    Util.OpenLink(slot.Link);
+                ImGui.SetCursorScreenPos(new Vector2(p.X, p.Y + rowH));
+                ImGui.Dummy(Vector2.Zero);
+            }
+        }
+    }
+
+    private static string DjInitial(string name)
+    {
+        var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var word  = words.Length > 1 && words[0].Equals("DJ", StringComparison.OrdinalIgnoreCase) ? words[1] : words.FirstOrDefault() ?? "?";
+        return word[..1].ToUpperInvariant();
+    }
+
+    private static void DrawActivity(NightActivity a, float w)
+    {
+        float gs   = ImGuiHelpers.GlobalScale;
+        var   dl   = ImGui.GetWindowDrawList();
+        var   col  = ActivityStyle.Color(a.Kind);
+        float box  = 30f * gs;
+        float line = ImGui.GetTextLineHeight();
+        var   p    = ImGui.GetCursorScreenPos();
+        var   now  = DateTime.Now;
+
+        dl.AddRectFilled(p, p + new Vector2(box), Palette.U(col with { W = 0.16f }), 8f * gs);
+        Widgets.DrawIconCentered(dl, ActivityStyle.Icon(a.Kind), p + new Vector2(box / 2f), col, 0.9f);
+
+        var  s    = a.Start is { } st ? Local(st) : (DateTime?)null;
+        var  e    = a.End is { } en ? Local(en) : (DateTime?)null;
+        bool live = s <= now && (e ?? s?.AddHours(1)) > now;
+        string when = s == null ? "" : e != null ? $"{s:HH:mm} to {e:HH:mm}" : $"{s:HH:mm}";
+        float whenW = 0f;
+        if (when.Length > 0)
+        {
+            var wsz = ImGui.CalcTextSize(when) + new Vector2(14f, 4f) * gs;
+            var wp  = new Vector2(p.X + w - wsz.X, p.Y + (box - wsz.Y) / 2f);
+            var wc  = live ? Palette.Live : Palette.TextSoft;
+            dl.AddRectFilled(wp, wp + wsz, Palette.U(wc with { W = live ? 0.16f : 0.07f }), wsz.Y / 2f);
+            dl.AddText(wp + new Vector2(7f, 2f) * gs, Palette.U(wc), when);
+            whenW = wsz.X + 8f * gs;
+        }
+
+        string name = a.Title.Length > 0 && a.Kind is "other" or "auction" or "contest" or "tournament" ? a.Title : a.Label;
+        float  tx   = p.X + box + 10f * gs;
+        float  room = w - box - 10f * gs - whenW;
+        string who  = a.Host.Length == 0 ? "" : a.Kind is "glam" or "contest" or "fashion" ? $"judged by {a.Host}" : $"with {a.Host}";
+        bool   twoLines = who.Length > 0;
+        float  ty   = twoLines ? p.Y + box / 2f - line : p.Y + (box - line) / 2f;
+        dl.AddText(new Vector2(tx, ty), Palette.U(Palette.Text), Widgets.Ellipsize(name, room));
+        if (twoLines) dl.AddText(new Vector2(tx, ty + line), Palette.U(Palette.Muted), Widgets.Ellipsize(who, room));
+        ImGui.Dummy(new Vector2(w, box));
+
+        bool subtitle = a.Title.Length > 0 && name != a.Title;
+        if (!subtitle && a.Details.Count == 0) return;
+
+        ImGui.Dummy(new Vector2(0, 4f * gs));
+        float indent = box + 10f * gs;
+        float labelW = 96f * gs;
+        if (subtitle)
+        {
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + indent);
+            ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Lerp(col, Palette.Text, 0.4f));
+            ImGui.TextUnformatted(a.Title);
+            ImGui.PopStyleColor();
+        }
+
+        foreach (var (label, value) in a.Details)
+        {
+            float x0 = ImGui.GetCursorPosX() + indent;
+            ImGui.SetCursorPosX(x0);
+            ImGui.PushStyleColor(ImGuiCol.Text, Palette.Muted);
+            ImGui.TextUnformatted(label);
+            ImGui.PopStyleColor();
+            ImGui.SameLine(x0 + labelW);
+
+            if (label == "Rules")
+            {
+                DrawRuleChips(value.Split(", "), w - indent - labelW, col);
+                continue;
+            }
+            ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + w - indent - labelW);
+            ImGui.PushStyleColor(ImGuiCol.Text, Palette.TextSoft);
+            ImGui.TextWrapped(value);
+            ImGui.PopStyleColor();
+            ImGui.PopTextWrapPos();
+        }
+    }
+
+    private static void DrawRuleChips(string[] rules, float w, Vector4 col)
+    {
+        float gs  = ImGuiHelpers.GlobalScale;
+        var   dl  = ImGui.GetWindowDrawList();
+        var   pos = ImGui.GetCursorScreenPos();
+        float h   = ImGui.GetTextLineHeight() + 4f * gs;
+        float x = pos.X, y = pos.Y;
+        foreach (var r in rules)
+        {
+            float cw = ImGui.CalcTextSize(r).X + 14f * gs;
+            if (x + cw > pos.X + w && x > pos.X) { x = pos.X; y += h + 4f * gs; }
+            dl.AddRectFilled(new Vector2(x, y), new Vector2(x + cw, y + h), Palette.U(col with { W = 0.14f }), h / 2f);
+            dl.AddText(new Vector2(x + 7f * gs, y + 2f * gs), Palette.U(Vector4.Lerp(col, Palette.Text, 0.35f)), r);
+            x += cw + 4f * gs;
+        }
+        ImGui.Dummy(new Vector2(w, y - pos.Y + h));
+    }
+
+    private static void Soft(string text)
+    {
+        ImGui.PushStyleColor(ImGuiCol.Text, Palette.TextSoft);
+        ImGui.TextWrapped(text);
+        ImGui.PopStyleColor();
+    }
+
     private static void DrawOpenings(VenueEvent ev, float w)
     {
         float gs   = ImGuiHelpers.GlobalScale;
@@ -353,7 +550,6 @@ public sealed class EventWindow : Window, IDisposable
         }
     }
 
-    // A rounded card like the ones in the list, with an optional colored edge.
     private static void Card(Vector4? stripe, Action<float> body)
     {
         float gs  = ImGuiHelpers.GlobalScale;
@@ -444,8 +640,7 @@ public sealed class EventWindow : Window, IDisposable
 
     private static void Space(float px) => ImGui.Dummy(new Vector2(0, px * ImGuiHelpers.GlobalScale));
 
-    private static Vector4 SourceColor(VenueEvent ev) =>
-        ev.Source == EventSource.Partake ? Palette.Partake : Palette.FFXIVenue;
+    private static Vector4 SourceColor(VenueEvent ev) => Palette.Source(ev.Source);
 
     private static (string, Vector4) Status(VenueEvent ev)
     {

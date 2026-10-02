@@ -5,8 +5,6 @@ using Newtonsoft.Json.Linq;
 
 namespace VenueScope.Helpers;
 
-// Partake stores team descriptions as the JSON of its rich text editor.
-// This turns it into the markdown RichText already knows how to draw.
 public static class SlateText
 {
     public static string ToMarkdown(string? raw)

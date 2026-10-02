@@ -59,6 +59,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private readonly PartakeService      _partakeService;
     private readonly FFXIVenueService    _ffxivenueService;
+    private readonly VenueScopeService   _venueScopeService;
     private readonly SynchellService     _synchellService;
     private readonly SpotlightService    _spotlightService;
     private readonly EventCacheService   _cacheService;
@@ -81,9 +82,10 @@ public sealed class Plugin : IDalamudPlugin
 
         _partakeService      = new PartakeService(Log, DataManager);
         _ffxivenueService    = new FFXIVenueService(Log);
+        _venueScopeService   = new VenueScopeService(Log);
         _synchellService     = new SynchellService(Log, Configuration.SynchellApiUrl);
         _spotlightService    = new SpotlightService(Log, Configuration.SpotlightApiUrl);
-        _cacheService        = new EventCacheService(_partakeService, _ffxivenueService, _synchellService, _spotlightService, Configuration, Log);
+        _cacheService        = new EventCacheService(_partakeService, _ffxivenueService, _venueScopeService, _synchellService, _spotlightService, Configuration, Log);
         _notificationService = new NotificationService(_cacheService, Configuration, NotificationManager, Log);
         _teamIconCache       = new TeamIconCache(TextureProvider, Log);
         LifestreamIpc        = new LifestreamIPC(PluginInterface);
@@ -109,7 +111,7 @@ public sealed class Plugin : IDalamudPlugin
         SpotlightWindow = new SpotlightWindow(Configuration);
         WindowSystem.AddWindow(SpotlightWindow);
 
-        EventWindow = new EventWindow(Configuration);
+        EventWindow = new EventWindow(Configuration, _cacheService);
         WindowSystem.AddWindow(EventWindow);
         EventRenderer.OnOpenEvent = EventWindow.Open;
 
@@ -126,6 +128,7 @@ public sealed class Plugin : IDalamudPlugin
             HelpMessage = "Alias for /venuescope"
         });
         PluginInterface.UiBuilder.Draw         += WindowSystem.Draw;
+        SynchellNotifOverlay.Config = Configuration;
         PluginInterface.UiBuilder.Draw         += SynchellNotifOverlay.Draw;
         PluginInterface.UiBuilder.OpenMainUi   += ToggleMainUi;
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUi;
@@ -160,6 +163,7 @@ public sealed class Plugin : IDalamudPlugin
         _cacheService.Dispose();
         _partakeService.Dispose();
         _ffxivenueService.Dispose();
+        _venueScopeService.Dispose();
         _synchellService.Dispose();
         _spotlightService.Dispose();
         _teamIconCache.Dispose();

@@ -10,8 +10,6 @@ using Dalamud.Utility;
 
 namespace VenueScope.Helpers;
 
-// Draws the markdown venue owners write on my.venuescope.club, and makes
-// Partake and Discord flavoured text readable with the game font.
 public static class RichText
 {
     private enum Kind { Paragraph, Heading, Bullet, Numbered, Quote, Small, Rule, Gap, Image }
@@ -83,7 +81,7 @@ public static class RichText
                     float indent = (14 + b.Level * 12) * gs;
                     ImGui.Indent(indent);
                     var pos = ImGui.GetCursorScreenPos();
-                    var marker = b.Kind == Kind.Bullet ? "•" : b.Marker;
+                    var marker = b.Kind == Kind.Bullet ? "\u2022" : b.Marker;
                     float mw = ImGui.CalcTextSize(marker).X;
                     ImGui.GetWindowDrawList().AddText(new Vector2(pos.X - mw - 5 * gs, pos.Y), Palette.U(Palette.Accent), marker);
                     DrawRuns(b.Runs, ColBody, Style.None);
@@ -252,7 +250,6 @@ public static class RichText
                 continue;
             }
 
-            // Text underlined with === or --- on the next line is a heading.
             if (n + 1 < lines.Length && line.Length <= 60 && IsUnderline(lines[n + 1].Trim()) && HasWords(line))
             {
                 blocks.Add(new Block(Kind.Heading, Runs(line), lines[n + 1].Trim()[0] == '=' ? 1 : 2));
@@ -298,7 +295,7 @@ public static class RichText
             {
                 blocks.Add(new Block(Kind.Quote, Runs(m.Groups[1].Value)));
             }
-            else if ((m = Regex.Match(raw, @"^(\s*)[-*+•]\s+(.*)$")).Success)
+            else if ((m = Regex.Match(raw, @"^(\s*)[-*+\u2022]\s+(.*)$")).Success)
             {
                 blocks.Add(new Block(Kind.Bullet, Runs(m.Groups[2].Value), Math.Min(2, m.Groups[1].Length / 2)));
             }
@@ -359,7 +356,6 @@ public static class RichText
         text = ColonEmoji.Replace(text, "");
         text = text.Replace("||", "");
 
-        // Fancy "𝘪𝘵𝘢𝘭𝘪𝘤" letters and full width text turn back into plain letters.
         text = text.Normalize(NormalizationForm.FormKC);
 
         var lines = text.Split('\n');
@@ -369,14 +365,13 @@ public static class RichText
             foreach (var c in lines[i])
                 sb.Append(Drawable(c) ? c : ' ');
             var l = sb.ToString();
-            // A line made only of symbols like ━━━ or 🔥🔥🔥 still separates sections.
             if (l.Trim().Length == 0 && lines[i].Trim().Length > 0)
             {
                 lines[i] = "---";
                 continue;
             }
             var lead = l.Length - l.TrimStart().Length;
-            lines[i] = (lead >= 2 && Regex.IsMatch(l, @"^\s*([-*+•]|\d{1,3}[.)])\s") ? l[..lead] : "") + Spaces.Replace(l.Trim(), " ");
+            lines[i] = (lead >= 2 && Regex.IsMatch(l, @"^\s*([-*+\u2022]|\d{1,3}[.)])\s") ? l[..lead] : "") + Spaces.Replace(l.Trim(), " ");
         }
         return string.Join('\n', lines);
     }
@@ -433,7 +428,6 @@ public static class RichText
     private static bool IsUnderline(string line) =>
         line.Length >= 3 && (line.Trim('=').Length == 0 || line.Trim('-').Length == 0);
 
-    // "=== Lineup ===" or "~ Lineup ~" becomes "Lineup".
     private static string TrimDecor(string line)
     {
         int a = 0, b = line.Length;
@@ -442,5 +436,5 @@ public static class RichText
         return line[a..b].Trim();
     }
 
-    private static bool IsDecor(char c) => c is '=' or '-' or '~' or '+' or '|' or ' ' or '•' or '—' or '–';
+    private static bool IsDecor(char c) => c is '=' or '-' or '~' or '+' or '|' or ' ' or '\u2022' or '\u2014' or '\u2013';
 }
