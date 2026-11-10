@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -25,7 +26,7 @@ public class SynchellService : IDisposable
     {
         _log    = log;
         _apiUrl = apiUrl;
-        _http   = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        _http   = new HttpClient(new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All }) { Timeout = TimeSpan.FromSeconds(15) };
         _http.DefaultRequestHeaders.Add("User-Agent", "Dalamud-VenueScope/1.0");
     }
 

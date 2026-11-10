@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -18,27 +19,58 @@ public class FFXIVenueService : IDisposable
 
     private const string ApiUrl = "https://api.ffxivvenues.com/v1.0/venue";
 
+    // our own copy of the list, refreshed every 15 minutes, so FFXIV Venues is not asked by every player
+    private const string CopyUrl = "https://venuescope-synchells.yunookami.workers.dev/ffxivvenues/venue";
+
+    // the venues change rarely: the list is kept an hour, the openings are worked out again on each refresh
+    private static readonly TimeSpan KeepList = TimeSpan.FromHours(1);
+    private string?  _json;
+    private DateTime _fetchedAt;
+
     public FFXIVenueService(IPluginLog log)
     {
         _log = log;
-        _http = new HttpClient();
+        _http = new HttpClient(new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All });
         _http.DefaultRequestHeaders.Add("User-Agent", "Dalamud-VenueScope/1.0");
         _http.Timeout = TimeSpan.FromSeconds(20);
     }
 
     public async Task<List<VenueEvent>> FetchEventsAsync()
     {
+        if (_json == null || DateTime.UtcNow - _fetchedAt >= KeepList)
+        {
+            var json = await Download(CopyUrl) ?? await Download(ApiUrl);
+            if (json != null)
+            {
+                _json      = json;
+                _fetchedAt = DateTime.UtcNow;
+            }
+        }
+        if (_json == null) return new List<VenueEvent>();
+
         try
         {
-            var json   = await _http.GetStringAsync(ApiUrl);
-            var events = ParseResponse(json);
-            _log.Debug($"[FFXIVenue] Fetched {events.Count} venues with upcoming openings.");
+            var events = ParseResponse(_json);
+            _log.Debug($"[FFXIVenue] {events.Count} venues with upcoming openings.");
             return events;
         }
         catch (Exception ex)
         {
-            _log.Warning($"[FFXIVenue] Could not fetch events: {ex.Message}");
+            _log.Warning($"[FFXIVenue] Could not read the venue list: {ex.Message}");
             return new List<VenueEvent>();
+        }
+    }
+
+    private async Task<string?> Download(string url)
+    {
+        try
+        {
+            return await _http.GetStringAsync(url);
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"[FFXIVenue] Could not fetch {url}: {ex.Message}");
+            return null;
         }
     }
 

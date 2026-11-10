@@ -77,7 +77,6 @@ public class Configuration : IPluginConfiguration
 
     public string PendingTravelCharName     { get; set; } = string.Empty;
     public string PendingTravelHomeWorld    { get; set; } = string.Empty;
-    public string PendingTravelDestination  { get; set; } = string.Empty;
 
     public List<string> FavoriteDataCenters { get; set; } = new();
     public List<string> FavoriteServers     { get; set; } = new();

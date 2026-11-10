@@ -8,7 +8,6 @@ public class LifestreamIPC : IDisposable
 {
     private readonly ICallGateSubscriber<string, object?>                    _executeCommand;
     private readonly ICallGateSubscriber<string, string, int>                _changeCharacter;
-    private readonly ICallGateSubscriber<string, string, string, bool, bool> _connectAndTravel;
     private readonly ICallGateSubscriber<string, string, bool>               _connectAndLogin;
     private readonly ICallGateSubscriber<bool>                               _isBusy;
     private readonly ICallGateSubscriber<int>                                _logout;
@@ -17,7 +16,6 @@ public class LifestreamIPC : IDisposable
     {
         _executeCommand   = pi.GetIpcSubscriber<string, object?>("Lifestream.ExecuteCommand");
         _changeCharacter  = pi.GetIpcSubscriber<string, string, int>("Lifestream.ChangeCharacter");
-        _connectAndTravel = pi.GetIpcSubscriber<string, string, string, bool, bool>("Lifestream.ConnectAndTravel");
         _connectAndLogin  = pi.GetIpcSubscriber<string, string, bool>("Lifestream.ConnectAndLogin");
         _isBusy           = pi.GetIpcSubscriber<bool>("Lifestream.IsBusy");
         _logout           = pi.GetIpcSubscriber<int>("Lifestream.Logout");
@@ -57,16 +55,6 @@ public class LifestreamIPC : IDisposable
         catch (Exception e)
         {
             Plugin.Log.Warning($"[LifestreamIPC] ChangeCharacter failed: {e.Message}");
-            return false;
-        }
-    }
-
-    public bool ConnectAndTravel(string charName, string charHomeWorld, string destination, bool noLogin)
-    {
-        try   { return _connectAndTravel.InvokeFunc(charName, charHomeWorld, destination, noLogin); }
-        catch (Exception e)
-        {
-            Plugin.Log.Warning($"[LifestreamIPC] ConnectAndTravel failed: {e.Message}");
             return false;
         }
     }

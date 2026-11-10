@@ -801,7 +801,6 @@ public static class EventRenderer
             config.PendingVenueServer        = string.Empty;
             config.PendingTravelCharName     = charName;
             config.PendingTravelHomeWorld    = charWorld;
-            config.PendingTravelDestination  = server;
             config.Save();
 
             Plugin.Log.Information($"Logging out to switch to {charName}@{charWorld} for {venueRegion} venue ({server})");

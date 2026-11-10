@@ -210,14 +210,6 @@ public sealed class Plugin : IDalamudPlugin
         return PartakeService.RegionList.ElementAtOrDefault(dc.Region);
     }
 
-    internal static bool AreSameDC(string world1, string world2)
-    {
-        var s1 = PartakeRef.Servers.Values.FirstOrDefault(s => s.Name.Equals(world1, StringComparison.OrdinalIgnoreCase));
-        var s2 = PartakeRef.Servers.Values.FirstOrDefault(s => s.Name.Equals(world2, StringComparison.OrdinalIgnoreCase));
-        if (s1 == null || s2 == null) return false;
-        return s1.DataCenterId == s2.DataCenterId;
-    }
-
     internal static string? GetServerRegion(string serverName)
     {
         var server = PartakeRef.Servers.Values.FirstOrDefault(s => s.Name.Equals(serverName, StringComparison.OrdinalIgnoreCase));
@@ -286,29 +278,11 @@ public sealed class Plugin : IDalamudPlugin
             if ((DateTime.UtcNow - _lastTravelAttempt).TotalSeconds < 1.0) return;
             _lastTravelAttempt = DateTime.UtcNow;
 
-            bool ok;
-            if (string.Equals(Configuration.PendingTravelDestination, Configuration.PendingTravelHomeWorld, StringComparison.OrdinalIgnoreCase))
-            {
-                ok = LifestreamIpc.ConnectAndLogin(
-                    Configuration.PendingTravelCharName,
-                    Configuration.PendingTravelHomeWorld);
-            }
-            else if (AreSameDC(Configuration.PendingTravelDestination, Configuration.PendingTravelHomeWorld))
-            {
-                ok = LifestreamIpc.ConnectAndTravel(
-                    Configuration.PendingTravelCharName,
-                    Configuration.PendingTravelHomeWorld,
-                    Configuration.PendingTravelHomeWorld,
-                    false);
-            }
-            else
-            {
-                ok = LifestreamIpc.ConnectAndTravel(
-                    Configuration.PendingTravelCharName,
-                    Configuration.PendingTravelHomeWorld,
-                    Configuration.PendingTravelDestination,
-                    false);
-            }
+            // the character only logs in: once in game, the venue address takes it to the right world
+            // through an aetheryte, like any venue of its region (no more data center travel from the lobby)
+            bool ok = LifestreamIpc.ConnectAndLogin(
+                Configuration.PendingTravelCharName,
+                Configuration.PendingTravelHomeWorld);
 
             if (ok)
             {
@@ -317,7 +291,6 @@ public sealed class Plugin : IDalamudPlugin
                 _travelStartedAt     = DateTime.UtcNow;
                 Configuration.PendingTravelCharName    = string.Empty;
                 Configuration.PendingTravelHomeWorld   = string.Empty;
-                Configuration.PendingTravelDestination = string.Empty;
                 Configuration.Save();
             }
             else
@@ -402,7 +375,6 @@ public sealed class Plugin : IDalamudPlugin
         config.PendingExpectedCharacter = string.Empty;
         config.PendingTravelCharName    = string.Empty;
         config.PendingTravelHomeWorld   = string.Empty;
-        config.PendingTravelDestination = string.Empty;
         config.Save();
     }
 

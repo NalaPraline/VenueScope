@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Dalamud.Plugin.Services;
@@ -19,7 +20,7 @@ public class PartyFinderService : IDisposable
     public PartyFinderService(IPluginLog log)
     {
         _log  = log;
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+        _http = new HttpClient(new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All }) { Timeout = TimeSpan.FromSeconds(20) };
         _http.DefaultRequestHeaders.Add("User-Agent", "Dalamud-VenueScope/1.0");
     }
 

@@ -15,6 +15,13 @@ public sealed class ChangelogWindow : Window, IDisposable
 
     private static readonly Release[] Releases =
     [
+        new("1.1.1.0", "November 2026", "Lighter downloads and region travel for 7.58",
+            [],
+            [
+                "The FFXIV Venues list now comes from a shared copy refreshed every 15 minutes, and every download is compressed: much less data for you and for FFXIV Venues",
+                "Switching to your character of another region now just logs it in, then travels from an aetheryte",
+            ],
+            []),
         new("1.1.0.0", "October 2026", "A new look, a real event page and two new sources",
             [
                 "A full page for every event: description, pictures, gallery, DJ lineup and activities",

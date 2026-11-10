@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "New look, a full event page with pictures, venue ads from the Party Finder, a quick search key, themes and animated banners."
+          changelog: "Much smaller and fewer downloads for the FFXIV Venues list, and switching region now logs your other character in and travels from an aetheryte."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
