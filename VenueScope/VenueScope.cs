@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.Command;
 using Dalamud.IoC;
@@ -26,6 +27,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IFramework              Framework            { get; private set; } = null!;
     [PluginService] internal static IObjectTable            ObjectTable          { get; private set; } = null!;
     [PluginService] internal static IKeyState               KeyState             { get; private set; } = null!;
+    [PluginService] internal static ICondition              Condition            { get; private set; } = null!;
 
     internal static LifestreamIPC  LifestreamIpc   { get; private set; } = null!;
     internal static PartakeService PartakeRef      { get; private set; } = null!;
@@ -303,8 +305,10 @@ public sealed class Plugin : IDalamudPlugin
         if (_pendingTeleportOnLoad && !string.IsNullOrEmpty(Configuration.PendingVenueCode))
         {
             var player = ObjectTable.LocalPlayer;
-            // wait until Lifestream is done with its own world or data center trip
-            if (player == null || LifestreamIpc.IsBusy())
+            // wait until Lifestream is done with its own world or data center trip, and until the game
+            // has really finished loading the zone: a teleport started during the fade in cuts its animation
+            if (player == null || LifestreamIpc.IsBusy() || !player.IsTargetable
+                || Condition[ConditionFlag.BetweenAreas] || Condition[ConditionFlag.BetweenAreas51])
             {
                 _pendingTeleportReadyAt = DateTime.MinValue;
                 return;

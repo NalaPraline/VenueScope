@@ -52,7 +52,7 @@ jobs:
           internal_name: "VenueScope"
           path: "latest.zip"
           type: ${{ steps.reltype.outputs.type }}
-          changelog: "Much smaller and fewer downloads for the FFXIV Venues list, and switching region now logs your other character in and travels from an aetheryte."
+          changelog: "Much smaller and fewer downloads for the FFXIV Venues list, and switching region now logs your other character in and travels from an aetheryte. The teleport after switching character no longer cuts its animation."
         env:
           PUBLISHER_KEY: ${{ secrets.PUNI_KEY }}
 
